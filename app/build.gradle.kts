@@ -72,4 +72,6 @@ dependencies {
 
     // 로컬 test 구역에서도 JUnit을 완벽하게 인식하도록 보장하는 정품 코드
     testImplementation("junit:junit:4.13.2")
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 }
