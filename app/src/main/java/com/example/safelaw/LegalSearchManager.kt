@@ -34,7 +34,7 @@ class LegalSearchManager(private val context: Context, private val lawCaseBox: B
         val queryVector = getEmbedding(query)
 
         return lawCaseBox.query()
-            .nearestNeighbors(LawCase_.featureVector, queryVector, limit)
+            .nearestNeighbors(LawCase_.embedding, queryVector, limit)
             .build()
             .find()
     }

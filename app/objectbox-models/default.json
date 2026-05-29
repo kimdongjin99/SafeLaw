@@ -4,114 +4,36 @@
   "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
   "entities": [
     {
-      "id": "1:1908216040527246576",
-      "lastPropertyId": "9:1049733716876867758",
+      "id": "1:6788986256167394023",
+      "lastPropertyId": "2:3835114820150737379",
       "name": "LawCase",
       "properties": [
         {
-          "id": "1:8223571841868223948",
+          "id": "1:6620108922337014590",
           "name": "id",
           "type": 6,
-          "flags": 1
+          "flags": 129
         },
         {
-          "id": "3:3093194384842750370",
-          "name": "content",
-          "type": 9
-        },
-        {
-          "id": "5:1275881545745407412",
-          "name": "caseName",
-          "type": 9
-        },
-        {
-          "id": "6:3041159264257840050",
-          "name": "caseNum",
-          "type": 9
-        },
-        {
-          "id": "7:1408423756382342439",
-          "name": "courtName",
-          "type": 9
-        },
-        {
-          "id": "8:3848052311095148178",
-          "name": "sentenceDate",
-          "type": 9
-        },
-        {
-          "id": "9:1049733716876867758",
-          "name": "featureVector",
-          "indexId": "5:9204816406825425193",
+          "id": "2:3835114820150737379",
+          "name": "embedding",
+          "indexId": "1:3148207795188695904",
           "type": 28,
           "flags": 8
         }
       ],
       "relations": []
-    },
-    {
-      "id": "2:684867835692756733",
-      "lastPropertyId": "7:7897451000962686765",
-      "name": "LawEntity",
-      "properties": [
-        {
-          "id": "1:6986990872563262766",
-          "name": "id",
-          "type": 6,
-          "flags": 1
-        },
-        {
-          "id": "2:5956800175432098486",
-          "name": "caseName",
-          "type": 9
-        },
-        {
-          "id": "3:7638546790263908159",
-          "name": "caseNum",
-          "type": 9
-        },
-        {
-          "id": "4:2696608479424122946",
-          "name": "courtName",
-          "type": 9
-        },
-        {
-          "id": "5:1204219866507208358",
-          "name": "sentenceDate",
-          "type": 9
-        },
-        {
-          "id": "6:6778828817946071233",
-          "name": "output",
-          "indexId": "3:6306413248193221313",
-          "type": 9,
-          "flags": 2048
-        },
-        {
-          "id": "7:7897451000962686765",
-          "name": "embedding",
-          "type": 28
-        }
-      ],
-      "relations": []
     }
   ],
-  "lastEntityId": "2:684867835692756733",
-  "lastIndexId": "5:9204816406825425193",
+  "lastEntityId": "1:6788986256167394023",
+  "lastIndexId": "1:3148207795188695904",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
   "modelVersionParserMinimum": 5,
   "retiredEntityUids": [],
-  "retiredIndexUids": [
-    8506248621773940746,
-    2907698430830158294,
-    8643954032247243107
-  ],
-  "retiredPropertyUids": [
-    2828671784170397839,
-    8968894500227924423
-  ],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
   "retiredRelationUids": [],
   "version": 1
 }
