@@ -126,44 +126,70 @@ class MainActivity : AppCompatActivity() {
                 Log.e("SafeLaw_DB", "❌ JSON 주입 중 치명적 에러 발생: ${e.message}")
                 e.printStackTrace()
             } finally {
-                try { reader?.close() } catch (ex: Exception) {}
+                try { reader?.close() } catch (_: Exception) {}
             }
         }
     }
 
     /**
-     * 🔍 [검색 및 통신 단계] 온디바이스에서 법률 ID를 추출해 서버로 전송하는 함수
+     * 🔍 [검색 및 섀도우 쿼리 단계] 진짜 판례 ID와 가짜(더미) ID들을 섞어서 서버 전송 준비
      */
     private fun executeSearchAndServerSync(box: Box<LawCase>) {
-        val firstCase = box.all.firstOrNull()
+        val firstCase = box.query().build().findFirst()
+
         if (firstCase != null) {
-            Log.d("SafeLaw_Network", "🎯 추출된 판례 ID: ${firstCase.id} -> 서버로 전송을 시도합니다.")
-            sendIdToServer(firstCase.id)
+            val targetId = firstCase.id
+
+            // LawCase_ 의존성 없이 순수 리스트로 ID 추출
+            val allIds = box.all.map { it.id }
+            val dummyIds = allIds
+                .filter { it != targetId }
+                .shuffled()
+                .take(3) // 가짜 ID 3개 선정
+
+            // 진짜 ID와 가짜 ID를 합친 후 무작위로 섞음
+            val mixedIds = (listOf(targetId) + dummyIds).shuffled()
+
+            Log.d("SafeLaw_Network", "🎯 [섀도우 쿼리 적용] 진짜 ID: [$targetId] / 전송할 ID 리스트: $mixedIds")
+            sendIdsToServer(mixedIds, targetId)
+
         } else {
             Log.e("SafeLaw_Network", "❌ 디비에 데이터가 존재하지 않습니다.")
         }
     }
 
-    // 📡 스프링 부트 서버로 판례 ID 전송 및 원문 수신
-    private fun sendIdToServer(targetId: Long) {
+    /**
+     * 📡 스프링 부트 서버로 섞인 ID 리스트 전송 및 진짜 원문만 남기고 가짜는 버리기
+     */
+    private fun sendIdsToServer(requestIds: List<Long>, targetId: Long) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                Log.d("SafeLaw_Network", "📡 스프링 부트 서버로 판례 ID 전송 시작... ID: [$targetId]")
-                val requestData = LawCaseRequest(ids = listOf(targetId))
+                Log.d("SafeLaw_Network", "📡 스프링 부트 서버로 블라인드 패킷 전송 시작... 요청 ID 목록: $requestIds")
+                val requestData = LawCaseRequest(ids = requestIds)
 
                 val response = RetrofitClient.apiService.getLawCaseTexts(requestData)
 
                 if (response.isSuccessful) {
                     val body = response.body()
-                    Log.d("SafeLaw_Network", "✅ 서버 응답 수신 성공! 받아온 데이터 개수: ${body?.size}개")
-                    body?.forEach {
-                        Log.d("SafeLaw_Network", "📄 [서버 원문] ID: ${it.id} / 제목: ${it.title}\n내용: ${it.content}")
+                    Log.d("SafeLaw_Network", "✅ 서버 응답 수신 성공! 받아온 데이터 총 개수: ${body?.size}개 (더미 포함)")
+
+                    // 1. 진짜 판례만 쏙 골라내기
+                    val trueCase = body?.find { it.id == targetId }
+
+                    // 2. 가짜(더미)로 딸려온 판례들은 화면에 노출하지 않고 폐기
+                    val dummyCases = body?.filter { it.id != targetId } ?: emptyList()
+                    Log.d("SafeLaw_Network", "🗑️ [보안 처리] 함께 수신된 가짜 판례 ${dummyCases.size}개는 메모리에서 안전하게 폐기합니다.")
+
+                    if (trueCase != null) {
+                        Log.d("SafeLaw_Network", "📄 [최종 유효 원문] ID: ${trueCase.id} / 제목: ${trueCase.title}\n내용: ${trueCase.content}")
+                    } else {
+                        Log.e("SafeLaw_Network", "❌ 응답 데이터 중에서 진짜 타겟 ID를 찾지 못했습니다.")
                     }
                 } else {
                     Log.e("SafeLaw_Network", "❌ 서버 에러 응답 발생 코드: ${response.code()}")
                 }
             } catch (e: Exception) {
-                Log.e("SafeLaw_Network", "❌ 서버 연결 실패 (서버 주소나 네트워크 상태를 확인하세요): ${e.message}")
+                Log.e("SafeLaw_Network", "❌ 서버 연결 실패: ${e.message}")
             }
         }
     }
