@@ -27,6 +27,7 @@ interface LlamaNativeModule {
 }
 
 const llamaModule = NativeModules.LlamaModule as LlamaNativeModule | undefined;
+const TEST_MAX_TOKENS = 32;
 const DEFAULT_QUESTION =
   '근로계약서를 작성하지 않은 경우 근로자는 어떻게 대응할 수 있나요?';
 
@@ -39,6 +40,7 @@ function App() {
   const [modelPath, setModelPath] = useState('');
   const [question, setQuestion] = useState(DEFAULT_QUESTION);
   const [answer, setAnswer] = useState('');
+  const [generationSeconds, setGenerationSeconds] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   const isBusy = runState === 'loading' || runState === 'generating';
@@ -87,10 +89,13 @@ function App() {
 
     setRunState('generating');
     setAnswer('');
+    setGenerationSeconds(null);
     setError('');
+    const startedAt = Date.now();
     try {
-      const result = await requireModule().generate(prompt, 64);
+      const result = await requireModule().generate(prompt, TEST_MAX_TOKENS);
       setAnswer(result.trim() || '모델이 빈 답변을 반환했습니다.');
+      setGenerationSeconds((Date.now() - startedAt) / 1000);
       setRunState('ready');
     } catch (generateError) {
       setError(errorMessage(generateError));
@@ -105,6 +110,7 @@ function App() {
       setRunState('idle');
       setModelPath('');
       setAnswer('');
+      setGenerationSeconds(null);
     } catch (releaseError) {
       setError(errorMessage(releaseError));
       setRunState('error');
@@ -210,7 +216,15 @@ function App() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>모델 출력</Text>
+            <View style={styles.outputHeader}>
+              <Text style={styles.label}>모델 출력</Text>
+              <Text style={styles.outputMeta}>
+                최대 {TEST_MAX_TOKENS}토큰
+                {generationSeconds !== null
+                  ? ` / ${generationSeconds.toFixed(1)}초`
+                  : ''}
+              </Text>
+            </View>
             <View style={styles.outputPanel}>
               {runState === 'generating' ? (
                 <View style={styles.outputLoading}>
@@ -325,6 +339,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFBF9',
     padding: 15,
   },
+  outputHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  outputMeta: {fontSize: 12, color: '#7A858A'},
   outputLoading: {flexDirection: 'row', alignItems: 'center', gap: 10},
   outputHint: {fontSize: 14, lineHeight: 21, color: '#7A858A'},
   answer: {fontSize: 15, lineHeight: 24, color: '#202C31'},

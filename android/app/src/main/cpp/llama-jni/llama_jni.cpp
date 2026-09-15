@@ -23,9 +23,20 @@ void llama_android_log(
         const char * text,
         void *
 ) {
-    const int priority = level >= GGML_LOG_LEVEL_ERROR
-            ? ANDROID_LOG_ERROR
-            : ANDROID_LOG_INFO;
+    int priority = ANDROID_LOG_INFO;
+    switch (level) {
+        case GGML_LOG_LEVEL_ERROR:
+            priority = ANDROID_LOG_ERROR;
+            break;
+        case GGML_LOG_LEVEL_WARN:
+            priority = ANDROID_LOG_WARN;
+            break;
+        case GGML_LOG_LEVEL_DEBUG:
+            priority = ANDROID_LOG_DEBUG;
+            break;
+        default:
+            break;
+    }
     __android_log_print(priority, LOG_TAG, "%s", text);
 }
 

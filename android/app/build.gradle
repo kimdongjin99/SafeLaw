@@ -88,12 +88,8 @@ android {
         versionName "1.0"
 
         ndk {
-            // 현재 Android Emulator가 x86_64이므로 이것만 빌드
-            abiFilters "x86_64"
-
-            // 실제 스마트폰 테스트 시 위 줄을 주석 처리하고 아래 줄을 활성화
-            // 대부분의 최신 안드로이드 스마트폰은 ARM64를 사용함, 후에 확인할 것
-            // abiFilters "arm64-v8a"
+            // 최신 실기기(ARM64)와 Android Emulator(x86_64)만 지원
+            abiFilters "arm64-v8a", "x86_64"
         }
     }
 

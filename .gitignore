@@ -41,6 +41,7 @@ android/gradle/gradle-daemon-jvm.properties
 node_modules/
 npm-debug.log
 yarn-error.log
+metro*.log
 
 # fastlane
 #

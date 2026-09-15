@@ -30,29 +30,33 @@ Starting dev server on http://localhost:8081
    j  - open DevTools
 
  BUNDLE  ./index.js ░░░░░░░░░░░░░░░░ 0% (0/1)
-transform[stderr]: (node:13248) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+transform[stderr]: (node:27104) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 transform[stderr]: (Use `node --trace-warnings ...` to show where the warning was created)
-transform[stderr]: (node:21760) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+transform[stderr]: (node:23900) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 transform[stderr]: (Use `node --trace-warnings ...` to show where the warning was created)
-transform[stderr]: (node:3288) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+transform[stderr]: (node:26968) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 transform[stderr]: (Use `node --trace-warnings ...` to show where the warning was created)
-transform[stderr]: (node:20552) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+transform[stderr]: (node:23028) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 transform[stderr]: (Use `node --trace-warnings ...` to show where the warning was created)
- BUNDLE  ./index.js ▓▓▓▓░░░░░░░░░░░░ 29% (152/282)
-transform[stderr]: (node:31964) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+ BUNDLE  ./index.js ▓▓░░░░░░░░░░░░░░ 16% (86/214)
+transform[stderr]: (node:15300) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 transform[stderr]: (Use `node --trace-warnings ...` to show where the warning was created)
-transform[stderr]: (node:35232) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+transform[stderr]: (node:19336) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 transform[stderr]: (Use `node --trace-warnings ...` to show where the warning was created)
-transform[stderr]: (node:35192) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+transform[stderr]: (node:19540) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 transform[stderr]: (Use `node --trace-warnings ...` to show where the warning was created)
-transform[stderr]: (node:36700) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+transform[stderr]: (node:4552) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 transform[stderr]: (Use `node --trace-warnings ...` to show where the warning was created)
-transform[stderr]: (node:26824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+transform[stderr]: (node:26108) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 transform[stderr]: (Use `node --trace-warnings ...` to show where the warning was created)
-transform[stderr]: (node:28872) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+transform[stderr]: (node:27188) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 transform[stderr]: (Use `node --trace-warnings ...` to show where the warning was created)
- BUNDLE  ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99% (615/622)
- BUNDLE  ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99% (624/625)
- BUNDLE  ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99% (625/625)
- BUNDLE  ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99% (2189/2343)
+ BUNDLE  ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99% (517/519)
+ BUNDLE  ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99% (633/634)
+ BUNDLE  ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99% (634/634)
+ BUNDLE  ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99% (1564/2352)
+ BUNDLE  ./index.js 
+ BUNDLE  ./index.js ░░░░░░░░░░░░░░░░ 0% (0/1)
+ BUNDLE  ./index.js 
+ BUNDLE  ./index.js ░░░░░░░░░░░░░░░░ 0% (0/1)
  BUNDLE  ./index.js 
