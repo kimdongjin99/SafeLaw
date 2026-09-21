@@ -75,3 +75,9 @@ metro*.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Local SLM input/output test UI
+/App.slm-test.tsx
+
+# Local model and legal-data assets
+/android/app/src/main/assets/

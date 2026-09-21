@@ -1,6 +1,8 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "org.jetbrains.kotlin.kapt"
+apply plugin: "io.objectbox"
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -80,6 +82,10 @@ android {
 
     namespace "com.safelaw"
 
+    androidResources {
+        noCompress += ["json", "onnx", "mdb", "gguf"]
+    }
+
     defaultConfig {
         applicationId "com.safelaw"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -134,4 +140,14 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+    def objectboxVersion = "4.0.3"
+    implementation("io.objectbox:objectbox-android:$objectboxVersion")
+    kapt("io.objectbox:objectbox-processor:$objectboxVersion")
+
+    implementation("com.github.doyaaaaaken:kotlin-csv-jvm:1.9.2")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.1")
+
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }
