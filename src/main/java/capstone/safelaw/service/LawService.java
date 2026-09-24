@@ -12,6 +12,7 @@ import io.objectbox.BoxStore;
 import io.objectbox.query.ObjectWithScore;
 import io.objectbox.query.Query;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -30,10 +31,13 @@ public class LawService {
 
     private final LegalDataRepository legalDataRepository;
     private final Box<Precedent> precedentBox;
+    private final int searchCandidates;
 
-    public LawService(LegalDataRepository legalDataRepository, BoxStore boxStore) {
+    public LawService(LegalDataRepository legalDataRepository, BoxStore boxStore,
+                      @Value("${safelaw.search.candidates:100}") int searchCandidates) {
         this.legalDataRepository = legalDataRepository;
         this.precedentBox = boxStore.boxFor(Precedent.class);
+        this.searchCandidates = Math.max(searchCandidates, MAX_TOP_K);
     }
 
     // 개인정보 보호: 검색 벡터 값은 절대 로그에 남기지 않는다.
@@ -41,12 +45,14 @@ public class LawService {
         validateVector(queryVector);
         int topK = resolveTopK(requestedTopK);
 
-        // findWithScores()는 유사도(거리) 오름차순으로 반환된다.
+        // HNSW는 근사 검색이라 후보 수가 적으면 더 가까운 판례를 놓친다.
+        // 후보를 넉넉히 찾은 뒤 상위 topK개만 사용한다. findWithScores()는 거리 오름차순으로 반환된다.
         List<ObjectWithScore<Precedent>> scored;
         try (Query<Precedent> query = precedentBox.query()
-                .nearestNeighbors(Precedent_.embedding, queryVector, topK)
+                .nearestNeighbors(Precedent_.embedding, queryVector, searchCandidates)
                 .build()) {
-            scored = query.findWithScores();
+            List<ObjectWithScore<Precedent>> candidates = query.findWithScores();
+            scored = candidates.subList(0, Math.min(topK, candidates.size()));
         }
 
         List<Long> ids = scored.stream().map(s -> s.get().id).toList();
