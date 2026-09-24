@@ -1,9 +1,9 @@
 package capstone.safelaw.dto;
 
 import lombok.Data;
-import java.util.List;
 
-@Data // Lombok을 이용해 Getter, Setter 등을 자동 생성합니다.
+@Data
 public class SearchRequestDto {
-    private List<String> keywords; // 예: ["전세 사기", "보증금"]
+    private float[] vector; // 앱에서 보내는 384차원 임베딩 벡터
+    private Integer topK;   // 반환할 판례 개수 (생략 시 3, 최대 10)
 }

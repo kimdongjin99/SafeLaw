@@ -2,22 +2,30 @@ package capstone.safelaw.config;
 
 import capstone.safelaw.domain.MyObjectBox;
 import io.objectbox.BoxStore;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.File;
 
+@Slf4j
 @Configuration
 public class ObjectBoxConfig {
 
-    @Bean
-    public BoxStore boxStore() {
-        System.out.println("📦 1.3GB 진짜 ObjectBox DB 폴더 연결 시도 중...");
+    // 서버 종료 시 DB 락(lock.mdb)을 안전하게 풀고 닫는다.
+    @Bean(destroyMethod = "close")
+    public BoxStore boxStore(@Value("${safelaw.objectbox.directory}") String directory) {
+        File dbDirectory = new File(directory);
 
-        // 1. 우리가 눈으로 확인한 그 폴더("safelaw-db")를 정확히 타겟팅합니다.
-        File dbDirectory = new File("safelaw-db");
+        // 폴더나 데이터 파일이 없으면 빈 DB가 새로 생성되므로, 서버 시작 자체를 실패시킨다.
+        if (!dbDirectory.isDirectory() || !new File(dbDirectory, "data.mdb").isFile()) {
+            throw new IllegalStateException(
+                    "ObjectBox DB 폴더를 찾을 수 없습니다: " + dbDirectory.getAbsolutePath()
+                            + " (data.mdb 포함 여부와 safelaw.objectbox.directory 설정을 확인하세요)");
+        }
 
-        // 2. name() 대신 directory() 방식을 써서 무조건 저 폴더만 읽게 멱살을 잡습니다!
+        log.info("ObjectBox DB 연결: {}", dbDirectory.getAbsolutePath());
         return MyObjectBox.builder().directory(dbDirectory).build();
     }
 }
