@@ -1,4 +1,4 @@
-package com.safelaw.db.network
+package com.safelaw.data.db.network
 
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory

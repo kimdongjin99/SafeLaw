@@ -1,7 +1,8 @@
-package com.safelaw.db.data
+package com.safelaw.data.db.data
 
 import android.content.Context
 import android.util.Log
+import com.safelaw.db.data.MyObjectBox
 import io.objectbox.BoxStore
 import java.io.File
 import java.io.FileOutputStream
@@ -40,7 +41,7 @@ object ObjectBox {
             }
 
             // 2. 진짜 파이썬 데이터가 완벽하게 심어진 상태에서 디비 엔진을 깨웁니다.
-            store = com.safelaw.db.data.MyObjectBox.builder()
+            store = MyObjectBox.builder()
                 .androidContext(context.applicationContext)
                 .directory(contextFolder)
                 .build()

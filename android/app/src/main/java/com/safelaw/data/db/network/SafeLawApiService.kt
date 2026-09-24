@@ -1,4 +1,4 @@
-package com.safelaw.db.network
+package com.safelaw.data.db.network
 
 import retrofit2.Response
 import retrofit2.http.Body

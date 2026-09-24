@@ -1,10 +1,13 @@
-package com.safelaw.db
+package com.safelaw.data.db
 
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.JsonReader
 import android.util.Log
+import com.safelaw.data.db.data.LawCase
+import com.safelaw.data.db.network.LawCaseRequest
+import com.safelaw.data.db.network.RetrofitClient
 import java.io.InputStreamReader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,9 +15,7 @@ import kotlinx.coroutines.launch
 import io.objectbox.Box
 import io.objectbox.BoxStore
 import com.safelaw.db.data.MyObjectBox
-import com.safelaw.db.data.LawCase
-import com.safelaw.db.network.RetrofitClient
-import com.safelaw.db.network.LawCaseRequest
+import kotlin.concurrent.thread
 
 class DbPrototypeRunner(private val context: Context) {
 
@@ -55,7 +56,7 @@ class DbPrototypeRunner(private val context: Context) {
      */
     private fun importJsonDataToDb(box: Box<LawCase>) {
         // 대용량 주입은 메인 스레드를 멈추지 않도록 백그라운드 스레드에서 실행
-        kotlin.concurrent.thread {
+        thread {
             var reader: JsonReader? = null
             try {
                 Log.d("SafeLaw_DB", "⚙️ [시작] 디비가 비어있어 JSON 스트리밍 주입을 시작합니다...")

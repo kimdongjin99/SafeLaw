@@ -1,4 +1,4 @@
-package com.safelaw.db.data
+package com.safelaw.data.db.data
 
 import io.objectbox.annotation.Entity
 import io.objectbox.annotation.Id

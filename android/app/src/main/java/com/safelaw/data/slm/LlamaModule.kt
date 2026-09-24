@@ -1,5 +1,5 @@
 // React Native의 JavaScript 호출을 llama.cpp JNI 브리지의 비동기 작업으로 전달
-package com.safelaw.slm
+package com.safelaw.data.slm
 
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext

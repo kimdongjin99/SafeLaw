@@ -1,7 +1,7 @@
-package com.safelaw.db.repository
+package com.safelaw.data.db.repository
 
-import com.safelaw.db.data.LawCase
-import com.safelaw.db.data.ObjectBox
+import com.safelaw.data.db.data.LawCase
+import com.safelaw.data.db.data.ObjectBox
 import io.objectbox.Box
 
 class LawRepository {

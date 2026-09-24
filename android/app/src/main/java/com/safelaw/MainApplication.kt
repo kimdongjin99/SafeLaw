@@ -6,8 +6,7 @@ import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
-import com.safelaw.slm.LlamaPackage
-import com.safelaw.db.DbPrototypeRunner
+import com.safelaw.data.slm.LlamaPackage
 
 //db연동 실험 시 아래 주석 제거하고 실행해주세요
 class MainApplication : Application(), ReactApplication {

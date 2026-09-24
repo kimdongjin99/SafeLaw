@@ -1,5 +1,5 @@
 // 역할: 개발용 로컬 GGUF 경로와 운영용 Hugging Face 모델 저장 위치를 관리합니다.
-package com.safelaw.slm
+package com.safelaw.data.slm
 
 import android.content.Context
 import java.io.File

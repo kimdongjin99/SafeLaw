@@ -1,5 +1,5 @@
 // Kotlin 코드와 llama.cpp의 네이티브 JNI 함수를 직접 연결
-package com.safelaw.slm
+package com.safelaw.data.slm
 
 /** Kotlin 코드와 llama.cpp 네이티브 추론 엔진을 연결하는 JNI 브리지입니다. */
 class LlamaBridge {

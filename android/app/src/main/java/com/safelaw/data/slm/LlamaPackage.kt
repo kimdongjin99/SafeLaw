@@ -1,5 +1,5 @@
 // LlamaModule을 React Native 런타임에 네이티브 모듈로 등록
-package com.safelaw.slm
+package com.safelaw.data.slm
 
 import com.facebook.react.BaseReactPackage
 import com.facebook.react.bridge.NativeModule
