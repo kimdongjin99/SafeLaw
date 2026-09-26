@@ -2,7 +2,7 @@ package com.safelaw.data.db.data
 
 import android.content.Context
 import android.util.Log
-import com.safelaw.db.data.MyObjectBox
+import com.safelaw.data.db.data.MyObjectBox
 import io.objectbox.BoxStore
 import java.io.File
 import java.io.FileOutputStream

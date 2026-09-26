@@ -6,7 +6,7 @@ import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import com.safelaw.data.db.data.LawCase
 import io.objectbox.Box
-import com.safelaw.db.data.LawCase_
+import com.safelaw.data.db.data.LawCase_
 import java.io.File
 import java.nio.LongBuffer
 

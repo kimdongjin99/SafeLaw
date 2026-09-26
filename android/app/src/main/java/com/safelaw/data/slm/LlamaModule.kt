@@ -6,9 +6,11 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.module.annotations.ReactModule
+import com.safelaw.data.db.LegalSearchRepository
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
+import com.safelaw.domain.SafeLawChatDomain
 
 @ReactModule(name = LlamaModule.NAME)
 class LlamaModule(reactContext: ReactApplicationContext) :
@@ -19,7 +21,36 @@ class LlamaModule(reactContext: ReactApplicationContext) :
     private val executor = Executors.newSingleThreadExecutor()
     private val invalidated = AtomicBoolean(false)
 
+    private val textGenerationRepository =
+        TextGenerationRepository(
+            context = reactContext.applicationContext,
+        )
+
+    private val safeLawChatDomain =
+        SafeLawChatDomain(
+            db = LegalSearchRepository(),
+            slm = textGenerationRepository,
+        )
     override fun getName(): String = NAME
+
+    @ReactMethod
+    fun ask(question: String, promise: Promise) {
+        if (question.isBlank()) {
+            promise.reject(
+                ERROR_INVALID_ARGUMENT,
+                "질문이 비어 있습니다.",
+            )
+            return
+        }
+
+        execute(promise, ERROR_GENERATE) {
+            kotlinx.coroutines.runBlocking {
+                val answer = safeLawChatDomain.ask(question)
+                promise.resolve(answer)
+            }
+        }
+    }
+
 
     /** 에뮬레이터의 앱 전용 외부 폴더에 미리 복사한 GGUF 모델을 로드합니다. */
     @ReactMethod
@@ -79,13 +110,17 @@ class LlamaModule(reactContext: ReactApplicationContext) :
     override fun invalidate() {
         if (invalidated.compareAndSet(false, true)) {
             try {
-                executor.execute { bridge.releaseModel() }
+                executor.execute {
+                    textGenerationRepository.release()
+                }
             } finally {
                 executor.shutdown()
             }
         }
+
         super.invalidate()
     }
+
 
     private fun execute(promise: Promise, errorCode: String, task: () -> Unit) {
         if (invalidated.get()) {

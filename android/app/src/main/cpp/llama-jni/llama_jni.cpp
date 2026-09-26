@@ -197,7 +197,7 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
  */
 extern "C"
 JNIEXPORT jboolean
-JNICALL Java_com_safelaw_slm_LlamaBridge_loadModel(
+JNICALL Java_com_safelaw_data_slm_LlamaBridge_loadModel(
         JNIEnv *env, jobject, jstring model_path
 ) {
     //g_mutex 잠금: 다른 스레드가 모델을 생성하거나 해제하는 중에 로드하지 못하게 한다.
@@ -236,7 +236,7 @@ JNICALL Java_com_safelaw_slm_LlamaBridge_loadModel(
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_com_safelaw_slm_LlamaBridge_generate(
+Java_com_safelaw_data_slm_LlamaBridge_generate(
         JNIEnv *env, jobject, jstring prompt, jint max_tokens
 ) {
     const char *prompt_chars = env->GetStringUTFChars(prompt, nullptr);
@@ -254,7 +254,7 @@ Java_com_safelaw_slm_LlamaBridge_generate(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_safelaw_slm_LlamaBridge_releaseModel(
+Java_com_safelaw_data_slm_LlamaBridge_releaseModel(
         JNIEnv *, jobject
 ) {
     std::lock_guard<std::mutex> lock(g_mutex);

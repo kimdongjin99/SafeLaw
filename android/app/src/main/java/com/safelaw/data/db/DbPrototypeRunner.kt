@@ -14,7 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import io.objectbox.Box
 import io.objectbox.BoxStore
-import com.safelaw.db.data.MyObjectBox
+import com.safelaw.data.db.data.MyObjectBox
 import kotlin.concurrent.thread
 
 class DbPrototypeRunner(private val context: Context) {
