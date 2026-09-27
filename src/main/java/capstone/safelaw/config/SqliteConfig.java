@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 import javax.sql.DataSource;
 import java.io.File;
@@ -14,7 +15,9 @@ import java.io.File;
 public class SqliteConfig {
 
     // sqlite-jdbc는 파일이 없으면 빈 DB를 새로 만들어 버리므로, 연결 전에 존재 여부를 확인한다.
+    // 회원 DB(UserDbConfig)와 DataSource가 두 개이므로, JPA가 이 판례 DB를 쓰도록 @Primary 지정
     @Bean
+    @Primary
     public DataSource dataSource(@Value("${safelaw.sqlite.path}") String path) {
         File dbFile = new File(path);
 

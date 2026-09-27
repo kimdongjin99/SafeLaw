@@ -35,3 +35,94 @@ Content-Type: application/json
 
 ### 최신 AI 모델(답변 생성 LLM) 배포 정보
 GET http://localhost:8080/api/v1/system/model/latest
+
+### 회원가입 (정상) → 201, 로그인 토큰 함께 반환 / 같은 이메일로 다시 보내면 409 EMAIL_ALREADY_EXISTS
+POST http://localhost:8080/api/v1/auth/signup
+Content-Type: application/json
+
+{
+  "name": "홍길동",
+  "email": "test@safelaw.com",
+  "password": "password123",
+  "termsAgreed": true
+}
+
+### 회원가입 (에러) - 약관 미동의 → 400 TERMS_NOT_AGREED
+POST http://localhost:8080/api/v1/auth/signup
+Content-Type: application/json
+
+{
+  "name": "홍길동",
+  "email": "test2@safelaw.com",
+  "password": "password123",
+  "termsAgreed": false
+}
+
+### 로그인 (정상) → 200, accessToken 반환
+# @name login
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@safelaw.com",
+  "password": "password123"
+}
+
+### 로그인 (에러) - 비밀번호 틀림 → 401 INVALID_CREDENTIALS
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@safelaw.com",
+  "password": "wrong-password"
+}
+
+### 내 정보 조회 (위 로그인 요청의 토큰 사용) → 200
+GET http://localhost:8080/api/v1/users/me
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 내 정보 조회 (에러) - 토큰 없음 → 401 UNAUTHORIZED
+GET http://localhost:8080/api/v1/users/me
+
+### 이름 변경 → 200
+PATCH http://localhost:8080/api/v1/users/me
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "김철수"
+}
+
+### 비밀번호 변경 → 204 / 현재 비밀번호가 틀리면 400 INVALID_CURRENT_PASSWORD, 소셜 회원이면 400 PASSWORD_NOT_SET
+PUT http://localhost:8080/api/v1/users/me/password
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "password123",
+  "newPassword": "newpassword456"
+}
+
+### 회원 탈퇴 → 204 (이후 같은 토큰으로 요청하면 401)
+DELETE http://localhost:8080/api/v1/users/me
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Google 로그인 - idToken은 앱의 Google Sign-In 결과. 처음이면 termsAgreed=true여야 가입(아니면 400 TERMS_NOT_AGREED)
+# SAFELAW_GOOGLE_CLIENT_IDS 미설정 시 503 SOCIAL_LOGIN_NOT_CONFIGURED
+POST http://localhost:8080/api/v1/auth/google
+Content-Type: application/json
+
+{
+  "idToken": "앱에서 받은 Google ID 토큰",
+  "termsAgreed": true
+}
+
+### Apple 로그인 - idToken은 앱의 Apple 로그인 결과(identityToken). 이름은 Apple이 토큰에 넣어주지 않으므로 앱에서 보낸다
+POST http://localhost:8080/api/v1/auth/apple
+Content-Type: application/json
+
+{
+  "idToken": "앱에서 받은 Apple identityToken",
+  "name": "홍길동",
+  "termsAgreed": true
+}

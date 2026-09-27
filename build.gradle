@@ -25,6 +25,12 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.xerial:sqlite-jdbc:3.45.1.0'
     implementation 'org.hibernate.orm:hibernate-community-dialects'
+    // 회원 비밀번호 BCrypt 해시 (Spring Security 전체가 아닌 crypto 모듈만 사용)
+    implementation 'org.springframework.security:spring-security-crypto'
+    // 로그인 토큰(JWT)
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-gson:0.12.6'
     compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
     annotationProcessor("io.objectbox:objectbox-processor:5.4.1")
