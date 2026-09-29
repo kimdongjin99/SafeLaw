@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 // /api/v1/users/** 는 로그인 토큰이 필요하다 (WebConfig → AuthInterceptor)
 @RestController
 @RequestMapping("/api/v1/users")
-@Tag(name = "User", description = "로그인한 회원 정보 API (Authorization: Bearer 토큰 필요)")
+@Tag(name = "User", description = "회원정보 API")
 @RequiredArgsConstructor
 public class UserController {
 

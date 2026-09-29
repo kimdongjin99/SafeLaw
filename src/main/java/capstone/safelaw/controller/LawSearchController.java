@@ -3,6 +3,7 @@ package capstone.safelaw.controller;
 import capstone.safelaw.dto.LawSearchResultDto;
 import capstone.safelaw.dto.SearchRequestDto;
 import capstone.safelaw.service.LawService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,6 +13,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/laws")
 @CrossOrigin(origins = "*")
+@Tag(name = "Law Search", description = "판례검색 API")
 @RequiredArgsConstructor
 public class LawSearchController {
 
