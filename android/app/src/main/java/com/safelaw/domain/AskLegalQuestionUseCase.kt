@@ -1,11 +1,16 @@
 package com.safelaw.domain
 
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.module.annotations.ReactModule
+import com.safelaw.data.slm.LlamaModule
 import com.safelaw.data.slm.TextGenerationRepository
 
+@ReactModule(name = LlamaModule.NAME)
 class SafeLawChatDomain(
+    reactContext: ReactApplicationContext,
     private val db: DbRepository,
     private val slm: SlmRepository,
-) {
+): ReactContextBaseJavaModule(reactContext) {
 
     suspend fun ask(question: String): String {
         // DB에서 벡터 검색 후 서버에서 grounding 데이터 조회
