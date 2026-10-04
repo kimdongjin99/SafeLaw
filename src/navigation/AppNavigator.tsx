@@ -1,110 +1,77 @@
-import React, { useState } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, MessageSquare, Grid3x3, Clock, Settings } from 'lucide-react-native';
+import 'react-native-gesture-handler';
 
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack'; // 👈 native-stack 대신 안전한 stack으로 변경
+import EncryptedStorage from 'react-native-encrypted-storage';
+
+import { colors } from '../theme/colors';
+
+// 화면 컴포넌트 불러오기
 import { LoginScreen } from '../screens/LoginScreen';
 import { SignupScreen } from '../screens/SignupScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { ChatScreen } from '../screens/ChatScreen';
-import { CategoryScreen } from '../screens/CategoryScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
-import { colors } from '../theme/colors';
 
 const Stack = createStackNavigator();
-const Tab = createBottomTabNavigator();
-
-function MainTabs() {
-  return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
-        },
-      }}
-    >
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          tabBarLabel: '홈',
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
-        }}
-      />
-      <Tab.Screen
-        name="Chat"
-        component={ChatScreen}
-        options={{
-          tabBarLabel: '상담',
-          tabBarIcon: ({ color, size }) => <MessageSquare color={color} size={size} />,
-        }}
-      />
-      <Tab.Screen
-        name="Category"
-        component={CategoryScreen}
-        options={{
-          tabBarLabel: '카테고리',
-          tabBarIcon: ({ color, size }) => <Grid3x3 color={color} size={size} />,
-        }}
-      />
-      <Tab.Screen
-        name="History"
-        component={HistoryScreen}
-        options={{
-          tabBarLabel: '기록',
-          tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
-        }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          tabBarLabel: '설정',
-          tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
-        }}
-      />
-    </Tab.Navigator>
-  );
-}
 
 export function AppNavigator() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [initialRoute, setInitialRoute] = useState<'Login' | 'Home'>('Login');
+
+  useEffect(() => {
+    const checkLoginStatus = async () => {
+      try {
+        const token = await EncryptedStorage.getItem('accessToken');
+        if (token && token !== 'null' && token.trim() !== '') {
+          setInitialRoute('Home');
+        } else {
+          setInitialRoute('Login');
+        }
+      } catch (error) {
+        console.error('보안 토큰 확인 실패:', error);
+        setInitialRoute('Login');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkLoginStatus();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors?.primary || '#007AFF'} />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!isAuthenticated ? (
-          <>
-            <Stack.Screen name="Login">
-              {(props) => (
-                <LoginScreen
-                  {...props}
-                  onLogin={() => setIsAuthenticated(true)}
-                />
-              )}
-            </Stack.Screen>
-            <Stack.Screen name="Signup">
-              {(props) => (
-                <SignupScreen
-                  {...props}
-                  onSignup={() => setIsAuthenticated(true)}
-                />
-              )}
-            </Stack.Screen>
-          </>
-        ) : (
-          <Stack.Screen name="Main" component={MainTabs} />
-        )}
+      <Stack.Navigator
+        initialRouteName={initialRoute}
+        screenOptions={{ headerShown: false }}
+      >
+        <Stack.Screen name="Login" component={LoginScreen as any} />
+        <Stack.Screen name="Signup" component={SignupScreen as any} />
+        <Stack.Screen name="Home" component={HomeScreen as any} />
+        <Stack.Screen name="Chat" component={ChatScreen as any} />
+        <Stack.Screen name="History" component={HistoryScreen as any} />
+        <Stack.Screen name="Settings" component={SettingsScreen as any} />
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors?.white || '#FFFFFF',
+  },
+});

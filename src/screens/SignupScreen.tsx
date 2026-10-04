@@ -8,19 +8,24 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Shield, Mail, Lock, User, Eye, EyeOff, Check } from 'lucide-react-native';
+import EncryptedStorage from 'react-native-encrypted-storage';
 import { colors } from '../theme/colors';
+import apiClient from '../api/client';
 
 interface Props {
-  onSignup: () => void;
+  onSignup?: () => void;
   navigation: any;
 }
 
 export function SignupScreen({ onSignup, navigation }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -32,13 +37,51 @@ export function SignupScreen({ onSignup, navigation }: Props) {
 
   const isPasswordMatch = formData.password === formData.confirmPassword;
   const canSubmit =
-    formData.name &&
-    formData.email &&
-    formData.password &&
-    formData.confirmPassword &&
+    formData.name.trim() !== '' &&
+    formData.email.trim() !== '' &&
+    formData.password.length >= 8 &&
     isPasswordMatch &&
     agreeToTerms &&
-    agreeToPrivacy;
+    agreeToPrivacy &&
+    !isLoading;
+
+  const handleSignup = async () => {
+    if (!canSubmit) return;
+
+    setIsLoading(true);
+    try {
+      // API 명세서 기준: POST /api/v1/auth/signup 호출 및 termsAgreed 전송
+      const response = await apiClient.post('/api/v1/auth/signup', {
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        termsAgreed: agreeToTerms && agreeToPrivacy, // 필수 약관 동의 여부 (boolean)
+      });
+
+      // 가입 즉시 로그인 처리 (응답받은 accessToken 저장)
+      if (response.data?.accessToken) {
+        await EncryptedStorage.setItem('accessToken', response.data.accessToken);
+      }
+
+      Alert.alert('가입 완료', '회원가입이 성공적으로 완료되었습니다.', [
+        { text: '확인', onPress: () => onSignup?.() }
+      ]);
+      
+    } catch (error: any) {
+      console.error('Signup Error:', error);
+      
+      const errorCode = error.response?.data?.code;
+      const errorMsg = error.response?.data?.message || '회원가입 처리 중 문제가 발생했습니다.';
+
+      if (errorCode === 'EMAIL_ALREADY_EXISTS' || error.response?.status === 409) {
+        Alert.alert('가입 실패', '이미 가입된 이메일입니다.');
+      } else {
+        Alert.alert('가입 실패', errorMsg);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -71,6 +114,7 @@ export function SignupScreen({ onSignup, navigation }: Props) {
                   onChangeText={(v) => setFormData({ ...formData, name: v })}
                   placeholder="홍길동"
                   placeholderTextColor={colors.mutedForeground}
+                  editable={!isLoading}
                 />
               </View>
             </View>
@@ -88,6 +132,7 @@ export function SignupScreen({ onSignup, navigation }: Props) {
                   placeholderTextColor={colors.mutedForeground}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  editable={!isLoading}
                 />
               </View>
             </View>
@@ -104,8 +149,9 @@ export function SignupScreen({ onSignup, navigation }: Props) {
                   placeholder="8자 이상 입력하세요"
                   placeholderTextColor={colors.mutedForeground}
                   secureTextEntry={!showPassword}
+                  editable={!isLoading}
                 />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} disabled={isLoading}>
                   {showPassword
                     ? <EyeOff color={colors.mutedForeground} size={20} />
                     : <Eye color={colors.mutedForeground} size={20} />}
@@ -128,8 +174,9 @@ export function SignupScreen({ onSignup, navigation }: Props) {
                   placeholder="비밀번호를 다시 입력하세요"
                   placeholderTextColor={colors.mutedForeground}
                   secureTextEntry={!showConfirm}
+                  editable={!isLoading}
                 />
-                <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
+                <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} disabled={isLoading}>
                   {showConfirm
                     ? <EyeOff color={colors.mutedForeground} size={20} />
                     : <Eye color={colors.mutedForeground} size={20} />}
@@ -146,11 +193,13 @@ export function SignupScreen({ onSignup, navigation }: Props) {
                 checked={agreeToTerms}
                 onChange={setAgreeToTerms}
                 label="서비스 이용약관에 동의합니다 (필수)"
+                disabled={isLoading}
               />
               <CheckboxItem
                 checked={agreeToPrivacy}
                 onChange={setAgreeToPrivacy}
                 label="개인정보 처리방침에 동의합니다 (필수)"
+                disabled={isLoading}
               />
             </View>
 
@@ -168,16 +217,20 @@ export function SignupScreen({ onSignup, navigation }: Props) {
             {/* Signup Button */}
             <TouchableOpacity
               style={[styles.primaryBtn, !canSubmit && styles.disabledBtn]}
-              onPress={onSignup}
+              onPress={handleSignup}
               disabled={!canSubmit}
             >
-              <Text style={styles.primaryBtnText}>회원가입</Text>
+              {isLoading ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={styles.primaryBtnText}>회원가입</Text>
+              )}
             </TouchableOpacity>
 
             {/* Login Link */}
             <View style={styles.loginRow}>
               <Text style={styles.loginLabel}>이미 계정이 있으신가요? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+              <TouchableOpacity onPress={() => navigation.navigate('Login')} disabled={isLoading}>
                 <Text style={styles.loginLink}>로그인</Text>
               </TouchableOpacity>
             </View>
@@ -192,17 +245,23 @@ function CheckboxItem({
   checked,
   onChange,
   label,
+  disabled,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
-    <TouchableOpacity style={styles.checkRow} onPress={() => onChange(!checked)}>
-      <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+    <TouchableOpacity 
+      style={styles.checkRow} 
+      onPress={() => !disabled && onChange(!checked)}
+      activeOpacity={disabled ? 1 : 0.7}
+    >
+      <View style={[styles.checkbox, checked && styles.checkboxChecked, disabled && { opacity: 0.5 }]}>
         {checked && <Check color={colors.white} size={12} />}
       </View>
-      <Text style={styles.checkLabel}>{label}</Text>
+      <Text style={[styles.checkLabel, disabled && { opacity: 0.5 }]}>{label}</Text>
     </TouchableOpacity>
   );
 }

@@ -1,20 +1,58 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Shield, Lock, Zap, MessageSquare } from 'lucide-react-native';
+import { Shield, Lock, Zap, MessageSquare, Download } from 'lucide-react-native';
 import { colors } from '../theme/colors';
+import apiClient from '../api/client';
 
 interface Props {
   navigation: any;
 }
 
 export function HomeScreen({ navigation }: Props) {
+  const [userName, setUserName] = useState<string>('');
+  const [modelVersion, setModelVersion] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const initializeHome = async () => {
+      try {
+        // 인터셉터에서 토큰을 자동 주입하므로 바로 엔드포인트만 호출합니다
+        const userRes = await apiClient.get('/api/v1/users/me');
+        setUserName(userRes.data.name);
+
+        const modelRes = await apiClient.get('/api/v1/system/model/latest');
+        setModelVersion(modelRes.data.version);
+      } catch (error: any) {
+        console.error('API 연동 에러:', error);
+        if (error.response?.status === 401) {
+          Alert.alert('알림', '로그인이 만료되었습니다. 다시 로그인해주세요.');
+          navigation.replace('Login');
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeHome();
+  }, [navigation]);
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -22,11 +60,20 @@ export function HomeScreen({ navigation }: Props) {
           <View style={styles.logoBox}>
             <Shield color={colors.white} size={32} />
           </View>
-          <Text style={styles.title}>법률 AI 어시스턴트</Text>
+          <Text style={styles.title}>
+            {userName ? `${userName}님,\n환영합니다` : '법률 AI 어시스턴트'}
+          </Text>
           <Text style={styles.subtitle}>
             개인정보 보호가 보장되는 온디바이스 AI 법률 상담
           </Text>
         </View>
+
+        {modelVersion && (
+          <View style={styles.modelStatusBox}>
+            <Download color={colors.primary} size={16} />
+            <Text style={styles.modelStatusText}>최신 AI 모델 준비 완료 (v{modelVersion})</Text>
+          </View>
+        )}
 
         <View style={styles.features}>
           <FeatureCard
@@ -79,14 +126,21 @@ function FeatureCard({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
+  center: { justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingHorizontal: 24, paddingBottom: 32 },
-  header: { paddingTop: 40, paddingBottom: 32 },
+  header: { paddingTop: 40, paddingBottom: 24 },
   logoBox: {
     width: 64, height: 64, backgroundColor: colors.primary,
     borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 16,
   },
-  title: { fontSize: 26, fontWeight: '700', color: colors.foreground, marginBottom: 8 },
+  title: { fontSize: 26, fontWeight: '700', color: colors.foreground, marginBottom: 8, lineHeight: 34 },
   subtitle: { fontSize: 14, color: colors.mutedForeground },
+  modelStatusBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.primaryLight, padding: 12, borderRadius: 8,
+    marginBottom: 24,
+  },
+  modelStatusText: { fontSize: 13, color: colors.primary, fontWeight: '500' },
   features: { gap: 12, marginBottom: 32 },
   card: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 16,

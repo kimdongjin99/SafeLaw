@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,14 @@ const CATEGORIES = [
 ];
 
 export function CategoryScreen({ navigation }: Props) {
+  // 검색어 상태 관리 추가
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // 검색어에 따른 카테고리 필터링 로직
+  const filteredCategories = CATEGORIES.filter(category =>
+    category.title.includes(searchQuery)
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -42,19 +50,29 @@ export function CategoryScreen({ navigation }: Props) {
           style={styles.searchInput}
           placeholder="카테고리 검색..."
           placeholderTextColor={colors.mutedForeground}
+          value={searchQuery}
+          onChangeText={setSearchQuery} // 검색어 입력 시 상태 업데이트
+          clearButtonMode="while-editing" // iOS x 버튼
         />
       </View>
 
       <FlatList
-        data={CATEGORIES}
+        // 필터링된 데이터를 FlatList에 전달
+        data={filteredCategories}
         keyExtractor={(item) => item.id}
         numColumns={2}
         contentContainerStyle={styles.grid}
         columnWrapperStyle={styles.row}
+        // 검색 결과가 없을 때 보여줄 UI 추가
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>검색 결과가 없습니다.</Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
-            onPress={() => navigation.navigate('Chat')}
+            onPress={() => navigation.navigate('Chat', { categoryId: item.id, categoryTitle: item.title })}
           >
             <View style={styles.cardIcon}>
               <item.Icon color={colors.primary} size={24} />
@@ -91,4 +109,13 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 14, fontWeight: '600', color: colors.foreground, marginBottom: 4 },
   cardCount: { fontSize: 12, color: colors.mutedForeground },
+  emptyContainer: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.mutedForeground,
+  },
 });

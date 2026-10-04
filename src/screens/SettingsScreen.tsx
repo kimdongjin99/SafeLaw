@@ -1,19 +1,83 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   User, Bell, Shield, HelpCircle,
-  Info, ChevronRight, Database,
+  Info, ChevronRight, Database, LogOut
 } from 'lucide-react-native';
+import EncryptedStorage from 'react-native-encrypted-storage';
 import { colors } from '../theme/colors';
+import apiClient from '../api/client';
 
-export function SettingsScreen() {
+interface Props {
+  navigation: any;
+}
+
+export function SettingsScreen({ navigation }: Props) {
+  const [userData, setUserData] = useState({ name: '사용자', email: '로딩 중...' });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        const response = await apiClient.get('/api/v1/users/me');
+        setUserData({ name: response.data.name, email: response.data.email });
+      } catch (error: any) {
+        console.error('사용자 정보 조회 실패:', error);
+        
+        if (error.response?.status === 401) {
+          Alert.alert('알림', '세션이 만료되었습니다. 다시 로그인해주세요.');
+          navigation.replace('Login');
+          return;
+        }
+        
+        setUserData({ name: '알 수 없음', email: '정보를 불러오지 못했습니다.' });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUserInfo();
+  }, [navigation]);
+
+  const handleLogout = () => {
+    Alert.alert('로그아웃', '정말 로그아웃 하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      { 
+        text: '로그아웃', 
+        style: 'destructive', 
+        onPress: async () => {
+          // 보안 저장소에서 토큰 삭제 후 로그인 화면으로 이동
+          await EncryptedStorage.removeItem('accessToken');
+          navigation.replace('Login');
+        }
+      }
+    ]);
+  };
+
+  const handleClearLocalData = () => {
+    Alert.alert(
+      '로컬 데이터 삭제',
+      '기기에 저장된 모든 상담 내역이 영구적으로 삭제됩니다. 계속하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        { 
+          text: '삭제', 
+          style: 'destructive', 
+          onPress: () => console.log('로컬 DB 삭제 수행') 
+        }
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -22,14 +86,21 @@ export function SettingsScreen() {
           <Text style={styles.subtitle}>앱 설정 및 개인정보 관리</Text>
         </View>
 
-        {/* Profile */}
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>사</Text>
+            <Text style={styles.avatarText}>
+              {isLoading ? '...' : userData.name.charAt(0)}
+            </Text>
           </View>
-          <View>
-            <Text style={styles.profileName}>사용자</Text>
-            <Text style={styles.profileEmail}>user@example.com</Text>
+          <View style={{ flex: 1 }}>
+            {isLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ alignItems: 'flex-start' }} />
+            ) : (
+              <>
+                <Text style={styles.profileName}>{userData.name}</Text>
+                <Text style={styles.profileEmail}>{userData.email}</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -37,7 +108,7 @@ export function SettingsScreen() {
           <SettingItem
             icon={<User color={colors.foreground} size={20} />}
             label="프로필 관리"
-            description="이름, 이메일 등 정보 수정"
+            description="이름, 비밀번호 등 정보 수정"
           />
           <SettingItem
             icon={<Bell color={colors.foreground} size={20} />}
@@ -55,11 +126,12 @@ export function SettingsScreen() {
           <SettingItem
             icon={<Database color={colors.foreground} size={20} />}
             label="로컬 데이터 관리"
-            description="저장된 상담 내역 관리"
+            description="저장된 상담 내역 및 캐시 삭제"
+            onPress={handleClearLocalData}
           />
         </SettingsSection>
 
-        <SettingsSection title="지원">
+        <SettingsSection title="지원 및 기타">
           <SettingItem
             icon={<HelpCircle color={colors.foreground} size={20} />}
             label="도움말"
@@ -70,13 +142,19 @@ export function SettingsScreen() {
             label="앱 정보"
             description="버전 1.0.0"
           />
+          <SettingItem
+            icon={<LogOut color={colors.destructive || '#FF3B30'} size={20} />}
+            label="로그아웃"
+            description="계정에서 로그아웃 합니다"
+            onPress={handleLogout}
+            isDestructive
+          />
         </SettingsSection>
 
-        {/* Privacy Notice */}
         <View style={styles.privacyBox}>
           <Shield color={colors.primary} size={20} />
           <Text style={styles.privacyText}>
-            모든 상담 내용은 기기 내에서만 처리되며, 외부로 전송되지 않습니다.
+            모든 상담 내용은 기기 내에서만 처리되며, 서버나 외부로 전송되지 않습니다.
           </Text>
         </View>
       </ScrollView>
@@ -103,19 +181,29 @@ function SettingItem({
   icon,
   label,
   description,
+  onPress,
+  isDestructive,
 }: {
   icon: React.ReactNode;
   label: string;
   description: string;
+  onPress?: () => void;
+  isDestructive?: boolean;
 }) {
   return (
-    <TouchableOpacity style={styles.settingItem}>
-      <View style={styles.settingIcon}>{icon}</View>
+    <TouchableOpacity 
+      style={styles.settingItem} 
+      onPress={onPress} 
+      activeOpacity={onPress ? 0.7 : 1}
+    >
+      <View style={[styles.settingIcon, isDestructive && { backgroundColor: '#FFEBEB' }]}>
+        {icon}
+      </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.settingLabel}>{label}</Text>
+        <Text style={[styles.settingLabel, isDestructive && { color: '#FF3B30' }]}>{label}</Text>
         <Text style={styles.settingDesc}>{description}</Text>
       </View>
-      <ChevronRight color={colors.mutedForeground} size={20} />
+      {onPress && <ChevronRight color={colors.mutedForeground} size={20} />}
     </TouchableOpacity>
   );
 }
@@ -159,6 +247,7 @@ const styles = StyleSheet.create({
   privacyBox: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 10,
     padding: 14, backgroundColor: colors.primaryLight, borderRadius: 10,
+    marginTop: 8,
   },
   privacyText: { fontSize: 12, color: colors.foreground, flex: 1, lineHeight: 18 },
 });

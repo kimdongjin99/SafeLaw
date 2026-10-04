@@ -1,115 +1,118 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   FlatList,
-  ScrollView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Clock, ChevronRight } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { MessageSquare, Trash2, ChevronRight, Plus } from 'lucide-react-native';
 import { colors } from '../theme/colors';
-
-interface HistoryItem {
-  id: string;
-  title: string;
-  preview: string;
-  date: string;
-  category: string;
-}
+import {
+  ChatSession,
+  getChatSessions,
+  deleteChatSession,
+} from '../services/chatStorage';
 
 interface Props {
   navigation: any;
 }
 
-const FILTERS = ['전체', '최근 7일', '최근 30일', '즐겨찾기'];
-
-const HISTORY: HistoryItem[] = [
-  {
-    id: '1',
-    title: '임대차 계약서 검토 요청',
-    preview: '전세 계약서 상의 특약 사항에 대해 문의드립니다...',
-    date: '2시간 전',
-    category: '부동산/임대차',
-  },
-  {
-    id: '2',
-    title: '퇴직금 계산 방법',
-    preview: '5년 근무 후 퇴직 시 퇴직금 계산 방법에 대해...',
-    date: '어제',
-    category: '노동/근로',
-  },
-  {
-    id: '3',
-    title: '온라인 쇼핑몰 환불 거부',
-    preview: '구매한 제품의 하자로 인한 환불 요청이 거부...',
-    date: '3일 전',
-    category: '소비자보호',
-  },
-  {
-    id: '4',
-    title: '차용증 작성 방법',
-    preview: '지인에게 돈을 빌려주는데 차용증을 작성하려고...',
-    date: '1주일 전',
-    category: '계약/문서',
-  },
-];
-
 export function HistoryScreen({ navigation }: Props) {
-  const [activeFilter, setActiveFilter] = useState('전체');
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHistory();
+    }, [])
+  );
+
+  const loadHistory = async () => {
+    const data = await getChatSessions();
+    setSessions(data);
+  };
+
+  const handleDelete = (id: string) => {
+    Alert.alert('상담 내역 삭제', '이 상담 내역을 정말 삭제하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteChatSession(id);
+          loadHistory();
+        },
+      },
+    ]);
+  };
+
+  const formatDate = (isoString: string) => {
+    const date = new Date(isoString);
+    return `${date.getFullYear()}.${date.getMonth() + 1}.${date.getDate()}`;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>상담 히스토리</Text>
-        <Text style={styles.subtitle}>이전 법률 상담 내역을 확인하세요</Text>
+        <View>
+          <Text style={styles.title}>상담 히스토리</Text>
+          <Text style={styles.subtitle}>기기에 안전하게 저장된 이전 상담 내역</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.newChatBtn}
+          onPress={() => navigation.navigate('Chat')}
+        >
+          <Plus color={colors.white} size={20} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterScroll}
-        contentContainerStyle={styles.filterContent}
-      >
-        {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterBtn, activeFilter === f && styles.filterBtnActive]}
-            onPress={() => setActiveFilter(f)}
-          >
-            <Text style={[styles.filterText, activeFilter === f && styles.filterTextActive]}>
-              {f}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
       <FlatList
-        data={HISTORY}
+        data={sessions}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
-            onPress={() => navigation.navigate('Chat')}
+            onPress={() => navigation.navigate('Chat', { sessionId: item.id })}
+            activeOpacity={0.7}
           >
-            <View style={styles.cardIcon}>
-              <Clock color={colors.mutedForeground} size={20} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.cardPreview} numberOfLines={2}>{item.preview}</Text>
-              <View style={styles.cardMeta}>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{item.category}</Text>
-                </View>
-                <Text style={styles.dateText}>{item.date}</Text>
+            <View style={styles.cardHeader}>
+              <View style={styles.iconBox}>
+                <MessageSquare color={colors.primary} size={20} />
               </View>
+              <Text style={styles.cardTitle} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <TouchableOpacity
+                onPress={() => handleDelete(item.id)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Trash2 color={colors.mutedForeground} size={18} />
+              </TouchableOpacity>
             </View>
-            <ChevronRight color={colors.mutedForeground} size={20} />
+
+            <Text style={styles.lastMessage} numberOfLines={2}>
+              {item.lastMessage}
+            </Text>
+
+            <View style={styles.cardFooter}>
+              <Text style={styles.dateText}>{formatDate(item.updatedAt)}</Text>
+              <ChevronRight color={colors.mutedForeground} size={16} />
+            </View>
           </TouchableOpacity>
         )}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <MessageSquare color={colors.mutedForeground} size={48} />
+            <Text style={styles.emptyTitle}>저장된 상담 내역이 없습니다</Text>
+            <Text style={styles.emptySubtitle}>
+              새로운 질문을 시작하면 이곳에 기록이 저장됩니다.
+            </Text>
+          </View>
+        }
       />
     </SafeAreaView>
   );
@@ -117,35 +120,35 @@ export function HistoryScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
-  header: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 16 },
-  title: { fontSize: 26, fontWeight: '700', color: colors.foreground, marginBottom: 6 },
-  subtitle: { fontSize: 14, color: colors.mutedForeground },
-  filterScroll: { marginBottom: 12 },
-  filterContent: { gap: 8, paddingHorizontal: 24 },
-  filterBtn: {
-    paddingHorizontal: 16, paddingVertical: 8,
-    backgroundColor: colors.secondary, borderRadius: 20,
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 16,
   },
-  filterBtnActive: { backgroundColor: colors.primary },
-  filterText: { fontSize: 13, color: colors.foreground },
-  filterTextActive: { color: colors.white },
-  list: { paddingHorizontal: 24, paddingBottom: 24, gap: 12 },
+  title: { fontSize: 24, fontWeight: '700', color: colors.foreground, marginBottom: 4 },
+  subtitle: { fontSize: 13, color: colors.mutedForeground },
+  newChatBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  listContent: { paddingHorizontal: 24, paddingBottom: 24, gap: 12 },
   card: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    padding: 16, backgroundColor: colors.white,
-    borderWidth: 1, borderColor: colors.border, borderRadius: 12,
+    padding: 16, borderRadius: 12, backgroundColor: colors.white,
+    borderWidth: 1, borderColor: colors.border,
   },
-  cardIcon: {
-    width: 40, height: 40, backgroundColor: colors.secondary,
-    borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  iconBox: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: colors.secondary, alignItems: 'center', justifyContent: 'center',
   },
-  cardTitle: { fontSize: 14, fontWeight: '600', color: colors.foreground, marginBottom: 4 },
-  cardPreview: { fontSize: 12, color: colors.mutedForeground, marginBottom: 8 },
-  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  badge: {
-    paddingHorizontal: 8, paddingVertical: 3,
-    backgroundColor: colors.primaryLight, borderRadius: 6,
-  },
-  badgeText: { fontSize: 11, color: colors.primary },
-  dateText: { fontSize: 12, color: colors.mutedForeground },
+  cardTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.foreground },
+  lastMessage: { fontSize: 13, color: colors.mutedForeground, lineHeight: 18, marginBottom: 12 },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  dateText: { fontSize: 11, color: colors.mutedForeground },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 120, paddingHorizontal: 32 },
+  emptyTitle: { fontSize: 16, fontWeight: '600', color: colors.foreground, marginTop: 16, marginBottom: 6 },
+  emptySubtitle: { fontSize: 13, color: colors.mutedForeground, textAlign: 'center' },
 });
