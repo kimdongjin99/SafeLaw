@@ -59,9 +59,10 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
     //모델 프롬프트 생성 메서드, 유저 메시지를 받아 프롬프트를 만든다.
     std::string format_prompt(const std::string &user_prompt) {
         const char *system_prompt =
-                "You are SafeLaw, a Korean legal information assistant. "
-                "Answer in Korean. If you are uncertain, say so. "
-                "Do not invent statutes or precedents.";
+                "당신은 한국 법률 정보를 제공하는 도우미 SafeLaw 입니다. "
+                "반드시 한국어로 답변하세요. "
+                "확실하지 않은 내용은 확실하지 않다고 밝혀 주세요. "
+                "법령이나 판례를 임의로 만들어내지 마세요.";
 
         const char *chat_template = llama_model_chat_template(g_model, nullptr);
         if (chat_template == nullptr) {

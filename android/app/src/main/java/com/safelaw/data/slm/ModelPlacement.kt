@@ -19,7 +19,7 @@ internal class ModelPlacement(context: Context) {
         val modelFile = File(modelDir, MODEL_FILE_NAME)
 
         check(modelFile.isFile && modelFile.canRead()) {
-            "개발용 GGUF 모델을 찾거나 읽을 수 없습니다: ${modelFile.absolutePath}"
+            "GGUF 모델을 찾거나 읽을 수 없습니다: ${modelFile.absolutePath}"
         }
         return modelFile
     }
