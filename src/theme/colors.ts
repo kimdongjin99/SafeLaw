@@ -1,0 +1,15 @@
+export const colors = {
+  primary: '#2563EB',
+  primaryLight: '#EFF6FF',
+  foreground: '#111827',
+  mutedForeground: '#6B7280',
+  border: '#E5E7EB',
+  inputBackground: '#F3F4F6',
+  secondary: '#F3F4F6',
+  white: '#FFFFFF',
+  destructive: '#EF4444',
+  red50: '#FEF2F2',
+  red300: '#FCA5A5',
+  red400: '#F87171',
+  red500: '#EF4444',
+};
