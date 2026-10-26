@@ -10,6 +10,6 @@ class LawCase {
     @Id(assignable = true)
     var id: Long = 0
 
-    @HnswIndex(dimensions = 128)
+    @HnswIndex(dimensions = 384)
     var embedding: FloatArray? = null
 }
