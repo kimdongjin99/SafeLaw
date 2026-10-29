@@ -28,9 +28,9 @@ interface SafeLawNativeModule {
   ask(question: string): Promise<string>;
 }
 
-const llamaModule = NativeModules.LlamaModule as
-  | SafeLawNativeModule
-  | undefined;
+const llamaModule = NativeModules.SafeLawModule as
+    | SafeLawNativeModule
+    | undefined;
 
 const INITIAL_MESSAGES: Message[] = [
   {

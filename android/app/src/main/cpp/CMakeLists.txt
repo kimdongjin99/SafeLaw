@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Preserve React Native's New Architecture app module and autolinked codegen
 # libraries when adding the separate llama.cpp JNI target.
-include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
+# include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
