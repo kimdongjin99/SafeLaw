@@ -2,19 +2,15 @@
 #include <jni.h>
 #include <android/log.h>
 #include <algorithm>
+#include <chrono>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "llama.h"
 
 namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
     constexpr const char *LOG_TAG = "SafeLawLlama";
-    constexpr uint32_t CONTEXT_SIZE = 2048;
-    constexpr uint32_t BATCH_SIZE = 512;
-
-
     std::mutex g_mutex;
     //여러 스레드가 공유 데이터에 동시에 접근하지 못하도록 잠그는 장치
     llama_model *g_model = nullptr;
@@ -46,6 +42,12 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
     //개발자가 C++에서 오류 로그를 남기려고 만든 함수
     void log_error(const std::string &message) {
         __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "%s", message.c_str());
+    }
+
+    double elapsed_ms(const std::chrono::steady_clock::time_point &started_at) {
+        return std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - started_at
+        ).count();
     }
 
     //모델 메모리 해제
@@ -95,7 +97,17 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
         return std::string(buffer.data(), length);
     }
 
-    std::string generate_text(const std::string &prompt, int max_tokens) {
+    std::string generate_text(
+            const std::string &prompt,
+            int max_tokens,
+            int requested_context_size,
+            int requested_batch_size,
+            int requested_micro_batch_size,
+            int requested_generation_threads,
+            int requested_prompt_threads
+    ) {
+        const auto generation_started_at = std::chrono::steady_clock::now();
+
         if (g_model == nullptr) {
             return "Model is not loaded.";
         }
@@ -112,8 +124,15 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
             return "Failed to tokenize the prompt.";
         }
 
+        const int context_size = std::clamp(requested_context_size, 512, 4096);
+        const int batch_size = std::clamp(requested_batch_size, 32, std::min(context_size, 1024));
+        const int micro_batch_size = std::clamp(
+                requested_micro_batch_size, 32, batch_size
+        );
+        const int generation_threads = std::clamp(requested_generation_threads, 1, 8);
+        const int prompt_threads = std::clamp(requested_prompt_threads, 1, 8);
         const int safe_max_tokens = std::clamp(max_tokens, 1, 512);
-        if (token_count + safe_max_tokens >= static_cast<int>(CONTEXT_SIZE)) {
+        if (token_count + safe_max_tokens >= context_size) {
             return "Prompt is too long for the current context size.";
         }
 
@@ -128,21 +147,34 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
         }
 
         llama_context_params context_params = llama_context_default_params();
-        context_params.n_ctx = CONTEXT_SIZE;
-        context_params.n_batch = BATCH_SIZE;
-        context_params.n_ubatch = BATCH_SIZE;
+        context_params.n_ctx = static_cast<uint32_t>(context_size);
+        context_params.n_batch = static_cast<uint32_t>(batch_size);
+        context_params.n_ubatch = static_cast<uint32_t>(micro_batch_size);
+        context_params.no_perf = false;
 
-        const unsigned int hardware_threads = std::thread::hardware_concurrency();
-        context_params.n_threads = std::clamp(
-                static_cast<int>(hardware_threads == 0 ? 4 : hardware_threads) - 2,
-                2, 6
+        context_params.n_threads = generation_threads;
+        context_params.n_threads_batch = prompt_threads;
+
+        __android_log_print(
+                ANDROID_LOG_INFO, LOG_TAG,
+                "PERF generation start: prompt_chars=%zu, prompt_tokens=%d, max_tokens=%d, "
+                "n_ctx=%d, n_batch=%d, n_ubatch=%d, threads=%d, prompt_threads=%d",
+                formatted_prompt.size(), token_count, safe_max_tokens,
+                context_size, batch_size, micro_batch_size,
+                generation_threads, prompt_threads
         );
-        context_params.n_threads_batch = context_params.n_threads;
 
+        const auto context_started_at = std::chrono::steady_clock::now();
         llama_context *context = llama_init_from_model(g_model, context_params);
         if (context == nullptr) {
             return "Failed to create the model context.";
         }
+        __android_log_print(
+                ANDROID_LOG_INFO, LOG_TAG,
+                "PERF context init: %.2f ms",
+                elapsed_ms(context_started_at)
+        );
+        llama_perf_context_reset(context);
 
         llama_sampler *sampler =
                 llama_sampler_chain_init(llama_sampler_chain_default_params());
@@ -151,6 +183,7 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
         llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
 
         std::string response;
+        int generated_tokens = 0;
         llama_batch batch =
                 llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
 
@@ -164,6 +197,8 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
             if (llama_vocab_is_eog(vocab, token)) {
                 break;
             }
+
+            ++generated_tokens;
 
             int piece_size = llama_token_to_piece(vocab, token, nullptr, 0, 0, true);
             if (piece_size < 0) {
@@ -180,6 +215,30 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
             llama_token next_token = token;
             batch = llama_batch_get_one(&next_token, 1);
         }
+
+        llama_synchronize(context);
+        const llama_perf_context_data perf = llama_perf_context(context);
+        const double prompt_tokens_per_second =
+                perf.t_p_eval_ms > 0.0 ? 1000.0 * perf.n_p_eval / perf.t_p_eval_ms : 0.0;
+        const double generated_tokens_per_second =
+                perf.t_eval_ms > 0.0 ? 1000.0 * perf.n_eval / perf.t_eval_ms : 0.0;
+
+        __android_log_print(
+                ANDROID_LOG_INFO, LOG_TAG,
+                "PERF prompt eval: %.2f ms, tokens=%d, speed=%.2f tok/s",
+                perf.t_p_eval_ms, perf.n_p_eval, prompt_tokens_per_second
+        );
+        __android_log_print(
+                ANDROID_LOG_INFO, LOG_TAG,
+                "PERF token generation: %.2f ms, eval_tokens=%d, output_tokens=%d, "
+                "speed=%.2f tok/s",
+                perf.t_eval_ms, perf.n_eval, generated_tokens, generated_tokens_per_second
+        );
+        __android_log_print(
+                ANDROID_LOG_INFO, LOG_TAG,
+                "PERF generation total: %.2f ms, response_bytes=%zu",
+                elapsed_ms(generation_started_at), response.size()
+        );
 
         llama_sampler_free(sampler);
         llama_free(context);
@@ -224,6 +283,7 @@ JNICALL Java_com_safelaw_data_slm_LlamaBridge_loadModel(
     params.use_mmap = true;
 
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "loading model: %s", path);
+    const auto model_load_started_at = std::chrono::steady_clock::now();
     g_model = llama_model_load_from_file(path, params);
     env->ReleaseStringUTFChars(model_path, path);
 
@@ -232,13 +292,35 @@ JNICALL Java_com_safelaw_data_slm_LlamaBridge_loadModel(
         return JNI_FALSE;
     }
 
+    char model_description[256] = {};
+    llama_model_desc(g_model, model_description, sizeof(model_description));
+    __android_log_print(
+            ANDROID_LOG_INFO, LOG_TAG,
+            "PERF model load: %.2f ms, size=%.2f MiB, params=%llu, gpu_layers=%d, mmap=%s, "
+            "model=%s",
+            elapsed_ms(model_load_started_at),
+            static_cast<double>(llama_model_size(g_model)) / (1024.0 * 1024.0),
+            static_cast<unsigned long long>(llama_model_n_params(g_model)),
+            params.n_gpu_layers,
+            params.use_mmap ? "true" : "false",
+            model_description
+    );
+
     return JNI_TRUE;
 }
 
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_safelaw_data_slm_LlamaBridge_generate(
-        JNIEnv *env, jobject, jstring prompt, jint max_tokens
+        JNIEnv *env,
+        jobject,
+        jstring prompt,
+        jint max_tokens,
+        jint context_size,
+        jint batch_size,
+        jint micro_batch_size,
+        jint generation_threads,
+        jint prompt_threads
 ) {
     const char *prompt_chars = env->GetStringUTFChars(prompt, nullptr);
     if (prompt_chars == nullptr) {
@@ -249,7 +331,15 @@ Java_com_safelaw_data_slm_LlamaBridge_generate(
     env->ReleaseStringUTFChars(prompt, prompt_chars);
 
     std::lock_guard<std::mutex> lock(g_mutex);
-    const std::string result = generate_text(prompt_string, max_tokens);
+    const std::string result = generate_text(
+            prompt_string,
+            max_tokens,
+            context_size,
+            batch_size,
+            micro_batch_size,
+            generation_threads,
+            prompt_threads
+    );
     return env->NewStringUTF(result.c_str());
 }
 

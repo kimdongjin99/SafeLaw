@@ -1,211 +1,210 @@
-import React, {useRef, useState} from 'react';
+import React, { useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  BackHandler,
   FlatList,
   KeyboardAvoidingView,
   NativeModules,
   Platform,
-  Pressable,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
-import {Menu, Plus, Send, ShieldCheck} from 'lucide-react-native';
-import {
-  SafeAreaProvider,
-  SafeAreaView,
-} from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { ArrowLeft, Bot, Send, User } from 'lucide-react-native';
 
-type Message = {
-  id: string;
-  role: 'assistant' | 'user';
-  text: string;
-  time: string;
-};
+import { colors } from './src/theme/colors';
+import { Message, saveChatMessage } from './src/services/chatStorage';
 
 interface SafeLawNativeModule {
   ask(question: string): Promise<string>;
 }
 
 const llamaModule = NativeModules.SafeLawModule as
-    | SafeLawNativeModule
-    | undefined;
-
-const INITIAL_MESSAGES: Message[] = [
-  {
-    id: 'welcome',
-    role: 'assistant',
-    text: '안녕하세요. SafeLaw입니다.\n궁금한 법률 문제를 편하게 질문해 주세요.',
-    time: '오후 8:46',
-  },
-];
-
-function currentTime(): string {
-  return new Intl.DateTimeFormat('ko-KR', {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date());
-}
+  | SafeLawNativeModule
+  | undefined;
 
 function App() {
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
-  const [draft, setDraft] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const listRef = useRef<FlatList<Message>>(null);
+  const [sessionId] = useState(() => Date.now().toString());
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const flatListRef = useRef<FlatList<Message>>(null);
 
-  const sendMessage = async () => {
-    const text = draft.trim();
-    if (!text || isGenerating) {
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) {
       return;
     }
 
+    const userText = input.trim();
     const requestId = Date.now();
-    setMessages(current => [
-      ...current,
-      {
-        id: `${requestId}-user`,
-        role: 'user',
-        text,
-        time: currentTime(),
-      },
-    ]);
-    setDraft('');
-    setIsGenerating(true);
+    setInput('');
+
+    const userMsg: Message = {
+      id: `${requestId}-user`,
+      sender: 'user',
+      text: userText,
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages(previous => [...previous, userMsg]);
+
+    try {
+      await saveChatMessage(sessionId, userMsg);
+    } catch (error) {
+      console.error('사용자 메시지 저장 실패:', error);
+    }
+
+    setIsLoading(true);
 
     try {
       if (!llamaModule) {
-        throw new Error('LlamaModule이 네이티브 앱에 등록되지 않았습니다.');
+        throw new Error('SafeLawModule이 네이티브 앱에 등록되지 않았습니다.');
       }
 
-      const answer = await llamaModule.ask(text);
-      setMessages(current => [
-        ...current,
-        {
-          id: `${requestId}-assistant`,
-          role: 'assistant',
-          text: answer.trim() || '모델이 빈 답변을 반환했습니다.',
-          time: currentTime(),
-        },
-      ]);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setMessages(current => [
-        ...current,
-        {
-          id: `${requestId}-error`,
-          role: 'assistant',
-          text: `모델 실행 오류: ${message}`,
-          time: currentTime(),
-        },
-      ]);
+      const answer = await llamaModule.ask(userText);
+      const aiMsg: Message = {
+        id: `${requestId}-ai`,
+        sender: 'ai',
+        text: answer.trim() || '모델이 빈 답변을 반환했습니다.',
+        timestamp: new Date().toISOString(),
+      };
+
+      setMessages(previous => [...previous, aiMsg]);
+
+      try {
+        await saveChatMessage(sessionId, aiMsg);
+      } catch (error) {
+        console.error('모델 답변 저장 실패:', error);
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorMsg: Message = {
+        id: `${requestId}-error`,
+        sender: 'ai',
+        text: `모델 실행 오류: ${errorMessage}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      setMessages(previous => [...previous, errorMsg]);
+
+      try {
+        await saveChatMessage(sessionId, errorMsg);
+      } catch (storageError) {
+        console.error('오류 메시지 저장 실패:', storageError);
+      }
     } finally {
-      setIsGenerating(false);
+      setIsLoading(false);
     }
   };
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <StatusBar barStyle="dark-content" backgroundColor="#B2C7D9" />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={0}
-          style={styles.flex}>
-          <View style={styles.header}>
-            <View style={styles.brandMark}>
-              <ShieldCheck color="#FFFFFF" size={20} strokeWidth={2.2} />
-            </View>
-            <View style={styles.headerCopy}>
-              <Text style={styles.title}>SafeLaw</Text>
-              <Text style={styles.subtitle}>법률 상담 도우미</Text>
-            </View>
-            <Pressable
-              accessibilityLabel="메뉴 열기"
-              accessibilityRole="button"
-              hitSlop={10}
-              style={({pressed}) => [
-                styles.headerButton,
-                pressed && styles.pressed,
-              ]}>
-              <Menu color="#29343C" size={23} />
-            </Pressable>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => BackHandler.exitApp()}
+            style={styles.backBtn}
+          >
+            <ArrowLeft color={colors.foreground} size={24} />
+          </TouchableOpacity>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>AI 법률 상담</Text>
+            <Text style={styles.headerSubtitle}>
+              온디바이스 보안 모드 작동 중
+            </Text>
           </View>
+        </View>
 
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        >
           <FlatList
-            ref={listRef}
-            contentContainerStyle={styles.messageList}
+            ref={flatListRef}
             data={messages}
             keyExtractor={item => item.id}
+            contentContainerStyle={styles.messageList}
             keyboardShouldPersistTaps="handled"
-            onContentSizeChange={() => listRef.current?.scrollToEnd({animated: true})}
-            renderItem={({item}) => {
-              const isUser = item.role === 'user';
+            onContentSizeChange={() =>
+              flatListRef.current?.scrollToEnd({ animated: true })
+            }
+            renderItem={({ item }) => {
+              const isUser = item.sender === 'user';
 
               return (
                 <View
                   style={[
-                    styles.messageRow,
-                    isUser ? styles.userRow : styles.assistantRow,
-                  ]}>
+                    styles.messageBubbleContainer,
+                    isUser ? styles.userRow : styles.aiRow,
+                  ]}
+                >
                   {!isUser && (
-                    <View style={styles.avatar}>
-                      <ShieldCheck color="#FFFFFF" size={17} />
+                    <View style={styles.aiAvatar}>
+                      <Bot color={colors.white} size={16} />
                     </View>
                   )}
-                  <View style={styles.messageBody}>
-                    {!isUser && <Text style={styles.sender}>SafeLaw</Text>}
-                    <View style={styles.bubbleLine}>
-                      {isUser && <Text style={styles.time}>{item.time}</Text>}
-                      <View
-                        style={[
-                          styles.bubble,
-                          isUser ? styles.userBubble : styles.assistantBubble,
-                        ]}>
-                        <Text style={styles.messageText}>{item.text}</Text>
-                      </View>
-                      {!isUser && <Text style={styles.time}>{item.time}</Text>}
-                    </View>
+
+                  <View
+                    style={[
+                      styles.bubble,
+                      isUser ? styles.userBubble : styles.aiBubble,
+                    ]}
+                  >
+                    <Text style={isUser ? styles.userText : styles.aiText}>
+                      {item.text}
+                    </Text>
                   </View>
+
+                  {isUser && (
+                    <View style={styles.userAvatar}>
+                      <User color={colors.white} size={16} />
+                    </View>
+                  )}
                 </View>
               );
             }}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Bot color={colors.primary} size={48} />
+                <Text style={styles.emptyTitle}>무엇이든 물어보세요</Text>
+                <Text style={styles.emptySubtitle}>
+                  임대차 계약, 교통사고, 손해배상 등 법률 고민을 입력해주시면
+                  AI가 분석해 드립니다.
+                </Text>
+              </View>
+            }
           />
 
-          <View style={styles.composer}>
-            <Pressable
-              accessibilityLabel="첨부하기"
-              accessibilityRole="button"
-              hitSlop={8}
-              style={({pressed}) => [
-                styles.addButton,
-                pressed && styles.pressed,
-              ]}>
-              <Plus color="#66737C" size={25} />
-            </Pressable>
+          <View style={styles.inputContainer}>
             <TextInput
-              accessibilityLabel="메시지 입력"
-              multiline
-              onChangeText={setDraft}
-              onSubmitEditing={sendMessage}
-              placeholder="법률 질문을 입력하세요"
-              placeholderTextColor="#8B959C"
-              returnKeyType="send"
               style={styles.input}
-              value={draft}
+              value={input}
+              onChangeText={setInput}
+              placeholder="법률 질문을 입력하세요..."
+              placeholderTextColor={colors.mutedForeground}
+              multiline
+              editable={!isLoading}
             />
-            <Pressable
-              accessibilityLabel="메시지 보내기"
-              accessibilityRole="button"
-              disabled={!draft.trim() || isGenerating}
-              onPress={sendMessage}
-              style={({pressed}) => [
-                styles.sendButton,
-                (!draft.trim() || isGenerating) && styles.sendButtonDisabled,
-                pressed && styles.pressed,
-              ]}>
-              <Send color="#FFFFFF" size={18} strokeWidth={2.4} />
-            </Pressable>
+
+            <TouchableOpacity
+              style={[
+                styles.sendBtn,
+                (!input.trim() || isLoading) && styles.disabledSendBtn,
+              ]}
+              onPress={handleSend}
+              disabled={!input.trim() || isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Send color={colors.white} size={18} />
+              )}
+            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -214,112 +213,97 @@ function App() {
 }
 
 const styles = StyleSheet.create({
-  flex: {flex: 1},
-  safeArea: {flex: 1, backgroundColor: '#B2C7D9'},
+  flex: { flex: 1 },
+  container: { flex: 1, backgroundColor: colors.white },
   header: {
-    minHeight: 64,
-    paddingHorizontal: 17,
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomColor: 'rgba(61, 80, 94, 0.12)',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    backgroundColor: '#B2C7D9',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  brandMark: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#315C73',
-  },
-  headerCopy: {flex: 1, marginLeft: 11},
-  title: {fontSize: 17, color: '#1E2930', fontWeight: '700'},
-  subtitle: {marginTop: 2, fontSize: 11, color: '#596A75'},
-  headerButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  messageList: {
-    flexGrow: 1,
-    paddingHorizontal: 14,
-    paddingTop: 22,
-    paddingBottom: 20,
-    gap: 16,
-  },
-  messageRow: {flexDirection: 'row', alignItems: 'flex-start'},
-  assistantRow: {paddingRight: 44},
-  userRow: {justifyContent: 'flex-end', paddingLeft: 44},
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#315C73',
-    marginRight: 8,
-  },
-  messageBody: {maxWidth: '88%'},
-  sender: {fontSize: 12, color: '#34434C', marginBottom: 5, marginLeft: 2},
-  bubbleLine: {flexDirection: 'row', alignItems: 'flex-end', gap: 5},
-  bubble: {
-    borderRadius: 16,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-    shadowColor: '#3C4D58',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  assistantBubble: {backgroundColor: '#FFFFFF', borderTopLeftRadius: 4},
-  userBubble: {backgroundColor: '#FEE500', borderTopRightRadius: 4},
-  messageText: {fontSize: 15, lineHeight: 21, color: '#20272C'},
-  time: {fontSize: 10, color: '#65747D', marginBottom: 2},
-  composer: {
-    minHeight: 66,
+  backBtn: { padding: 8, marginRight: 8 },
+  headerTitleContainer: { flex: 1 },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.foreground },
+  headerSubtitle: { fontSize: 12, color: colors.mutedForeground },
+  messageList: { flexGrow: 1, padding: 16, gap: 16 },
+  messageBubbleContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 9,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderTopColor: '#E2E5E7',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    backgroundColor: '#FFFFFF',
+    gap: 8,
+    marginBottom: 12,
   },
-  addButton: {
-    width: 38,
-    height: 42,
+  userRow: { justifyContent: 'flex-end' },
+  aiRow: { justifyContent: 'flex-start' },
+  aiAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  userAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.mutedForeground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bubble: { maxWidth: '75%', padding: 12, borderRadius: 16 },
+  userBubble: { backgroundColor: colors.primary, borderBottomRightRadius: 2 },
+  aiBubble: { backgroundColor: colors.secondary, borderBottomLeftRadius: 2 },
+  userText: { color: colors.white, fontSize: 14, lineHeight: 20 },
+  aiText: { color: colors.foreground, fontSize: 14, lineHeight: 20 },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.foreground,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 8,
+    backgroundColor: colors.white,
   },
   input: {
     flex: 1,
-    maxHeight: 108,
-    minHeight: 42,
-    paddingHorizontal: 14,
-    paddingTop: Platform.OS === 'ios' ? 11 : 8,
-    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
-    borderColor: '#DDE2E5',
-    borderWidth: 1,
-    borderRadius: 21,
-    backgroundColor: '#F7F8F9',
-    fontSize: 15,
-    lineHeight: 20,
-    color: '#20272C',
+    maxHeight: 100,
+    backgroundColor: colors.inputBackground,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: colors.foreground,
   },
-  sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+  sendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#315C73',
   },
-  sendButtonDisabled: {backgroundColor: '#BCC5CA'},
-  pressed: {opacity: 0.72},
+  disabledSendBtn: { opacity: 0.5 },
 });
 
 export default App;

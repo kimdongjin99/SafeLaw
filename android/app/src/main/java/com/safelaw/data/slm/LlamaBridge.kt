@@ -13,7 +13,15 @@ class LlamaBridge {
     external fun loadModel(modelPath: String): Boolean
 
     /** 로드된 모델에 프롬프트를 전달하고 생성된 텍스트를 반환합니다. */
-    external fun generate(prompt: String, maxTokens: Int): String
+    external fun generate(
+        prompt: String,
+        maxTokens: Int,
+        contextSize: Int,
+        batchSize: Int,
+        microBatchSize: Int,
+        generationThreads: Int,
+        promptThreads: Int,
+    ): String
 
     /** 로드된 모델과 네이티브 리소스를 해제합니다. */
     external fun releaseModel()

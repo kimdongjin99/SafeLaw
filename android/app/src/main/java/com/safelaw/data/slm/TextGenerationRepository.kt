@@ -2,7 +2,10 @@ package com.safelaw.data.slm
 
 import android.content.Context
 import com.safelaw.domain.SlmRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 
 class TextGenerationRepository(
@@ -11,6 +14,11 @@ class TextGenerationRepository(
 ) : SlmRepository {
 
     private val modelPlacement = ModelPlacement(context)
+    private val inferenceProfile = InferenceProfile.forCurrentDevice()
+    private val modelPreparationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val preparedModel = modelPreparationScope.async {
+        modelPlacement.getLocalDevelopmentModel()
+    }
     private var isModelLoaded = false
 
     override suspend fun generateAnswer(
@@ -31,16 +39,21 @@ class TextGenerationRepository(
 
         bridge.generate(
             prompt = prompt,
-            maxTokens = 256,
+            maxTokens = inferenceProfile.maxTokens,
+            contextSize = inferenceProfile.contextSize,
+            batchSize = inferenceProfile.batchSize,
+            microBatchSize = inferenceProfile.microBatchSize,
+            generationThreads = inferenceProfile.generationThreads,
+            promptThreads = inferenceProfile.promptThreads,
         )
     }
 
-    private fun ensureModelLoaded() {
+    private suspend fun ensureModelLoaded() {
         if (isModelLoaded) {
             return
         }
 
-        val modelFile = modelPlacement.getLocalDevelopmentModel()
+        val modelFile = preparedModel.await()
 
         check(bridge.loadModel(modelFile.absolutePath)) {
             "GGUF 모델을 불러오지 못했습니다: ${modelFile.absolutePath}"
