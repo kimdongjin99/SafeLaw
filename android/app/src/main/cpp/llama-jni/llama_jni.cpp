@@ -188,7 +188,25 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
                 llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
 
         for (int generated = 0; generated < safe_max_tokens; ++generated) {
-            if (llama_decode(context, batch) != 0) {
+            const auto decode_started_at = std::chrono::steady_clock::now();
+            if (generated == 0) {
+                __android_log_print(
+                        ANDROID_LOG_INFO, LOG_TAG,
+                        "PERF prompt decode start: tokens=%d",
+                        token_count
+                );
+            }
+
+            const int decode_result = llama_decode(context, batch);
+            if (generated == 0) {
+                __android_log_print(
+                        ANDROID_LOG_INFO, LOG_TAG,
+                        "PERF prompt decode end: %.2f ms, result=%d",
+                        elapsed_ms(decode_started_at), decode_result
+                );
+            }
+
+            if (decode_result != 0) {
                 log_error("llama_decode failed");
                 break;
             }
@@ -199,6 +217,13 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
             }
 
             ++generated_tokens;
+            if (generated_tokens == 1 || generated_tokens % 16 == 0) {
+                __android_log_print(
+                        ANDROID_LOG_INFO, LOG_TAG,
+                        "PERF generation progress: output_tokens=%d/%d",
+                        generated_tokens, safe_max_tokens
+                );
+            }
 
             int piece_size = llama_token_to_piece(vocab, token, nullptr, 0, 0, true);
             if (piece_size < 0) {

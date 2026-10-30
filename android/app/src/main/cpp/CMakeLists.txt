@@ -22,12 +22,16 @@ set(LLAMA_BUILD_APP OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_UI OFF CACHE BOOL "" FORCE)
 if(ANDROID_ABI STREQUAL "arm64-v8a")
     set(GGML_SYSTEM_ARCH "ARM")
-    set(GGML_CPU_KLEIDIAI ON)
-    set(GGML_OPENMP ON)
+    # Galaxy S10 5G (Exynos 9820) supports Armv8.2 dot-product and FP16 SIMD.
+    # Explicitly compile these kernels because Android cross-compilation cannot
+    # infer the target phone's CPU features from the Windows build host.
+    set(GGML_CPU_ARM_ARCH "armv8.2-a+dotprod+fp16" CACHE STRING "" FORCE)
+    set(GGML_CPU_KLEIDIAI ON CACHE BOOL "" FORCE)
+    set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 elseif(ANDROID_ABI STREQUAL "x86_64")
     set(GGML_SYSTEM_ARCH "x86")
-    set(GGML_CPU_KLEIDIAI OFF)
-    set(GGML_OPENMP OFF)
+    set(GGML_CPU_KLEIDIAI OFF CACHE BOOL "" FORCE)
+    set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 endif()
 
 add_subdirectory(third-party/llama.cpp build-llama EXCLUDE_FROM_ALL)
