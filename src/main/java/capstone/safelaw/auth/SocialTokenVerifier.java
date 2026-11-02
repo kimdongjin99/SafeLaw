@@ -30,7 +30,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 앱이 Google/Apple 로그인 후 받은 ID 토큰을 검증한다.
+ * 앱이 Google 로그인 후 받은 ID 토큰을 검증한다.
  * 제공자가 공개한 서명 키(JWKS)로 서명을 확인하고, 발급자(iss)·발급 대상(aud)·만료 시간을 확인한다.
  * 공개 키는 캐시해두고, 모르는 키(kid)가 오면(제공자의 키 교체) 다시 받아온다.
  */
@@ -52,7 +52,6 @@ public class SocialTokenVerifier {
 
     public SocialTokenVerifier(SocialLoginProperties properties) {
         clientIds.put(SocialProvider.GOOGLE, properties.googleClientIds());
-        clientIds.put(SocialProvider.APPLE, properties.appleClientIds());
     }
 
     public SocialProfile verify(SocialProvider provider, String idToken) {
@@ -92,7 +91,7 @@ public class SocialTokenVerifier {
             throw new ApiException(ErrorCode.INVALID_SOCIAL_TOKEN);
         }
 
-        // 제공자가 인증한 이메일만 사용한다. Apple은 email_verified를 문자열 "true"로 줄 때가 있다.
+        // 제공자가 인증한 이메일만 사용한다. email_verified는 문자열 "true"로 올 수도 있어 둘 다 허용한다.
         Object verified = claims.get("email_verified");
         boolean emailVerified = Boolean.TRUE.equals(verified) || "true".equals(verified);
         String email = claims.get("email", String.class);
@@ -140,7 +139,7 @@ public class SocialTokenVerifier {
         }
     }
 
-    // 테스트에서 실제 Google/Apple 대신 로컬 키를 쓰도록 재정의할 수 있게 protected
+    // 테스트에서 실제 Google 대신 로컬 키를 쓰도록 재정의할 수 있게 protected
     protected Map<String, Key> fetchKeys(SocialProvider provider) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create(provider.jwksUri()))
                 .timeout(HTTP_TIMEOUT)

@@ -74,11 +74,11 @@ class SocialTokenVerifierTest {
 
     @Test
     void notConfiguredProvider() {
-        assertError(ErrorCode.SOCIAL_LOGIN_NOT_CONFIGURED, () -> verifier.verify(SocialProvider.APPLE, "anything"));
+        assertError(ErrorCode.SOCIAL_LOGIN_NOT_CONFIGURED, () -> verifierWith(List.of()).verify(SocialProvider.GOOGLE, "anything"));
     }
 
     private SocialTokenVerifier verifierWith(List<String> googleClientIds) {
-        return new SocialTokenVerifier(new SocialLoginProperties(googleClientIds, List.of())) {
+        return new SocialTokenVerifier(new SocialLoginProperties(googleClientIds)) {
             @Override
             protected Map<String, Key> fetchKeys(SocialProvider provider) {
                 return Map.of(KEY_ID, keyPair.getPublic());

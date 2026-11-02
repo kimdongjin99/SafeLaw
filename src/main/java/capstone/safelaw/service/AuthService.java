@@ -94,7 +94,7 @@ public class AuthService {
     }
 
     /**
-     * Google/Apple 로그인. 이미 가입된 소셜 계정이면 로그인하고, 처음이면 가입시킨다.
+     * Google 로그인. 이미 가입된 소셜 계정이면 로그인하고, 처음이면 가입시킨다.
      * 처음인데 termsAgreed가 true가 아니면 TERMS_NOT_AGREED → 앱에서 약관 동의를 받은 뒤 같은 ID 토큰으로 다시 요청한다.
      */
     public AuthResponseDto socialLogin(SocialProvider provider, SocialLoginRequestDto request) {

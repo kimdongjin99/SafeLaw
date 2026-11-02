@@ -6,9 +6,7 @@ import java.util.Set;
 public enum SocialProvider {
 
     GOOGLE("https://www.googleapis.com/oauth2/v3/certs",
-            Set.of("accounts.google.com", "https://accounts.google.com")),
-    APPLE("https://appleid.apple.com/auth/keys",
-            Set.of("https://appleid.apple.com"));
+            Set.of("accounts.google.com", "https://accounts.google.com"));
 
     private final String jwksUri;
     private final Set<String> issuers;

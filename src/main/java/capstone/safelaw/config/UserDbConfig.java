@@ -40,7 +40,7 @@ public class UserDbConfig {
     @Bean
     public JdbcTemplate userJdbcTemplate(@Qualifier("userDataSource") DataSource userDataSource) {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(userDataSource);
-        // 소셜 로그인 회원은 password_hash가 없고, Apple은 이메일을 주지 않을 수 있다.
+        // 소셜 로그인 회원은 password_hash가 없고, 인증되지 않은 이메일은 저장하지 않아 email이 없을 수 있다.
         // SQLite의 UNIQUE는 NULL을 여러 개 허용한다.
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS users (

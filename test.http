@@ -116,13 +116,3 @@ Content-Type: application/json
   "idToken": "앱에서 받은 Google ID 토큰",
   "termsAgreed": true
 }
-
-### Apple 로그인 - idToken은 앱의 Apple 로그인 결과(identityToken). 이름은 Apple이 토큰에 넣어주지 않으므로 앱에서 보낸다
-POST http://localhost:8080/api/v1/auth/apple
-Content-Type: application/json
-
-{
-  "idToken": "앱에서 받은 Apple identityToken",
-  "name": "홍길동",
-  "termsAgreed": true
-}

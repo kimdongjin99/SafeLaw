@@ -43,10 +43,4 @@ public class AuthController {
     public ResponseEntity<AuthResponseDto> google(@RequestBody SocialLoginRequestDto request) {
         return ResponseEntity.ok(authService.socialLogin(SocialProvider.GOOGLE, request));
     }
-
-    @Operation(summary = "Apple 로그인", description = "앱에서 받은 Apple ID 토큰(identityToken)으로 로그인합니다. 처음이면 termsAgreed=true일 때 가입됩니다.")
-    @PostMapping("/apple")
-    public ResponseEntity<AuthResponseDto> apple(@RequestBody SocialLoginRequestDto request) {
-        return ResponseEntity.ok(authService.socialLogin(SocialProvider.APPLE, request));
-    }
 }
