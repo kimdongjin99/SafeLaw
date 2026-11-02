@@ -9,14 +9,26 @@
 
 #include "llama.h"
 
-namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
+namespace {
+    //이 .cpp에서만 사용할 변수, 메서드 정의
+
     constexpr const char *LOG_TAG = "SafeLawLlama";
-    std::mutex g_mutex;
-    //여러 스레드가 공유 데이터에 동시에 접근하지 못하도록 잠그는 장치
+    std::mutex g_mutex;         //여러 스레드가 공유 데이터에 동시에 접근하지 못하도록 잠그는 장치
     llama_model *g_model = nullptr;
     bool g_backend_initialized = false;
 
-    //llama.cpp의 오류 로그를 android tomcat에서 확인할 수 있도록 해주는 메서드
+    // llama.cpp의 오류 로그를 android tomcat에서 확인할 수 있도록 해주는 메서드
+    // 1. 모델 파일을 제대로 읽었는지
+    // 2. 어떤 모델을 사용하고 있는지
+    // 3. 모델의 양자화 방식
+    // 4. 메모리를 얼마나 사용하는지
+    // 5. 문맥 길이 설정
+    // 6. CPU 및 하드웨어 사용 정보
+    // 7. 모델의 레이어가 어떻게 로딩됐는지
+    // 8. 토큰 변환 상태
+    // 9. 답변 생성 성능
+    // 10. 경고와 오류의 심각도
+    // 등을 출력한다.
     void llama_android_log(
             enum ggml_log_level level,
             const char *text,
@@ -37,13 +49,15 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
                 break;
         }
         __android_log_print(priority, LOG_TAG, "%s", text);
+        //Android Logcat으로 로그를 출력하는 Android NDK 함수
     }
 
-    //개발자가 C++에서 오류 로그를 남기려고 만든 함수
+    //개발자가 C++에서 오류 로그를 남기려고 만든 함수, 즉 프로젝트에서 발견한 오류 출력용 함수입니다.
     void log_error(const std::string &message) {
         __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "%s", message.c_str());
     }
 
+    //"현재 시각 - 시작 시각 = 걸린 시간" 공식으로 ms를 측정합니다.
     double elapsed_ms(const std::chrono::steady_clock::time_point &started_at) {
         return std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started_at
@@ -66,22 +80,30 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
                 "확실하지 않은 내용은 확실하지 않다고 밝혀 주세요. "
                 "법령이나 판례를 임의로 만들어내지 마세요.";
 
+        //현재 모델에 내장된 채팅 템플릿을 가져오고, 템플릿이 없으면 직접 기본 프롬프트를 만들어 반환하는 역할
         const char *chat_template = llama_model_chat_template(g_model, nullptr);
         if (chat_template == nullptr) {
             return std::string(system_prompt) + "\n\nUser: " + user_prompt + "\nAssistant:";
         }
 
+        //각 메시지를 시스템/유저 형식으로 지정
         const llama_chat_message messages[] = {
                 {"system", system_prompt},
                 {"user",   user_prompt.c_str()},
         };
 
+        //모델별 채팅 규칙에 맞게 system 지시와 사용자 질문을 하나의 프롬프트로 조립하여 문자 버퍼에 저장하는 부분
         std::vector<char> buffer(user_prompt.size() * 2 + 1024);
         int32_t length = llama_chat_apply_template(
-                chat_template, messages, 2, true, buffer.data(),
-                static_cast<int32_t>(buffer.size())
+                chat_template,                        //모델에 내장된 채팅 템플릿
+                messages,                     //변환할 채팅 메시지 배열, 시스템/유저 메시지 쌍이 있다.
+                2,                                   //메시지 배열에 메시지가 2개 있다는 뜻
+                true,                               //assistant 답변을 생성해야 한다고 명시
+                buffer.data(),                         //변환된 프롬프트를 기록할 실제 메모리 주소
+                static_cast<int32_t>(buffer.size())  //현재 버퍼가 저장할 수 있는 문자 수를 전달
         );
 
+        //버퍼 사이즈 확인 후 부족하면 증설
         if (length > static_cast<int32_t>(buffer.size())) {
             buffer.resize(length);
             length = llama_chat_apply_template(
@@ -89,7 +111,8 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
                     static_cast<int32_t>(buffer.size())
             );
         }
-
+        //length에 음수 할당 시 매우 큰 양수형 크기로 변환될 수 있어 잘못된 메모리 접근, 예외 또는 앱 비정상
+        //종료로 이어질 수 있으므로, 템플릿 대신 직접 만든 단순 프롬프트를 반환한다.
         if (length < 0) {
             return std::string(system_prompt) + "\n\nUser: " + user_prompt + "\nAssistant:";
         }
@@ -106,24 +129,31 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
             int requested_generation_threads,
             int requested_prompt_threads
     ) {
+        //텍스트 생성 시작 시간 기록
         const auto generation_started_at = std::chrono::steady_clock::now();
 
         if (g_model == nullptr) {
             return "Model is not loaded.";
         }
 
+        //formatted_prompt를 토큰화했을 때 토큰을 몇 개 저장해야 하는지 미리 계산하는 과정
         const llama_vocab *vocab = llama_model_get_vocab(g_model);
         const std::string formatted_prompt = format_prompt(prompt);
         const int token_count = -llama_tokenize(
-                vocab, formatted_prompt.c_str(),
+                vocab,
+                formatted_prompt.c_str(),
                 static_cast<int32_t>(formatted_prompt.size()),
-                nullptr, 0, true, true
+                nullptr,
+                0,
+                true,
+                true
         );
 
         if (token_count <= 0) {
             return "Failed to tokenize the prompt.";
         }
 
+        //각 변수를 clamp를 통해 안전한 사이즈로 지정
         const int context_size = std::clamp(requested_context_size, 512, 4096);
         const int batch_size = std::clamp(requested_batch_size, 32, std::min(context_size, 1024));
         const int micro_batch_size = std::clamp(
@@ -136,16 +166,21 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
             return "Prompt is too long for the current context size.";
         }
 
+        //이전에 구한 입력 토큰수로 토큰 벡터를 만듦
         std::vector<llama_token> tokens(token_count);
         if (llama_tokenize(
-                vocab, formatted_prompt.c_str(),
+                vocab,
+                formatted_prompt.c_str(),
                 static_cast<int32_t>(formatted_prompt.size()),
-                tokens.data(), static_cast<int32_t>(tokens.size()),
-                true, true
+                tokens.data(),
+                static_cast<int32_t>(tokens.size()),
+                true,
+                true
         ) < 0) {
             return "Failed to tokenize the prompt.";
         }
 
+        //llama.cpp가 제공하는 기본값으로 설정 구조체를 생성하고, 필요한 설정만 변경하는 부분
         llama_context_params context_params = llama_context_default_params();
         context_params.n_ctx = static_cast<uint32_t>(context_size);
         context_params.n_batch = static_cast<uint32_t>(batch_size);
@@ -155,6 +190,7 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
         context_params.n_threads = generation_threads;
         context_params.n_threads_batch = prompt_threads;
 
+        //모델 답변 생성을 시작하기 직전에 현재 프롬프트 크기와 추론 설정값을 Android Logcat에 기록
         __android_log_print(
                 ANDROID_LOG_INFO, LOG_TAG,
                 "PERF generation start: prompt_chars=%zu, prompt_tokens=%d, max_tokens=%d, "
@@ -164,6 +200,7 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
                 generation_threads, prompt_threads
         );
 
+        //컨텍스트를 생성하며 시간을 기록하고 로그로 출력한다.
         const auto context_started_at = std::chrono::steady_clock::now();
         llama_context *context = llama_init_from_model(g_model, context_params);
         if (context == nullptr) {
@@ -176,6 +213,7 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
         );
         llama_perf_context_reset(context);
 
+        //샘플러 설정
         llama_sampler *sampler =
                 llama_sampler_chain_init(llama_sampler_chain_default_params());
         llama_sampler_chain_add(sampler, llama_sampler_init_min_p(0.05f, 1));
@@ -185,8 +223,12 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
         std::string response;
         int generated_tokens = 0;
         llama_batch batch =
-                llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
+                llama_batch_get_one(
+                        tokens.data(),
+                        static_cast<int32_t>(tokens.size())
+                        );
 
+        //답변 생성 부분, 시간을 기록하며 로그로 출력한다.
         for (int generated = 0; generated < safe_max_tokens; ++generated) {
             const auto decode_started_at = std::chrono::steady_clock::now();
             if (generated == 0) {
@@ -197,6 +239,7 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
                 );
             }
 
+            //실제 추론 부분(llama_decode()), context에 결과 저장
             const int decode_result = llama_decode(context, batch);
             if (generated == 0) {
                 __android_log_print(
@@ -211,6 +254,7 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
                 break;
             }
 
+            //모델이 예측한 후보 중 다음 토큰 하나를 선택하고, 답변 종료 신호라면 생성 반복문을 끝낸다
             const llama_token token = llama_sampler_sample(sampler, context, -1);
             if (llama_vocab_is_eog(vocab, token)) {
                 break;
@@ -225,7 +269,15 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
                 );
             }
 
-            int piece_size = llama_token_to_piece(vocab, token, nullptr, 0, 0, true);
+            //모델이 선택한 토큰 ID를 실제 문자열 조각으로 변환해서 최종 답변 response에 추가한다.
+            int piece_size = llama_token_to_piece(
+                    vocab,
+                    token,
+                    nullptr,
+                    0,
+                    0,
+                    true
+                    );
             if (piece_size < 0) {
                 std::vector<char> piece(static_cast<size_t>(-piece_size));
                 piece_size = llama_token_to_piece(
@@ -241,6 +293,8 @@ namespace { //이 .cpp에서만 사용할 변수, 메서드 정의
             batch = llama_batch_get_one(&next_token, 1);
         }
 
+        //모든 모델 계산이 끝날 때까지 기다린 뒤, llama.cpp가 수집한 성능 통계를 가져와
+        // 프롬프트 처리 속도와 답변 생성 속도를 계산한다.
         llama_synchronize(context);
         const llama_perf_context_data perf = llama_perf_context(context);
         const double prompt_tokens_per_second =
