@@ -1,16 +1,14 @@
 *.iml
 .gradle
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+.idea
 .DS_Store
-/build
+/android/build
 /captures
 .externalNativeBuild
 .cxx
 local.properties
-app/src/main/assets/model.onnx
+.kotlin/
+
+# assets의 JSON(판례 데이터 727MB, 미사용 tokenizer.json)은 올리지 않음
+/android/app/src/main/assets/*.json
