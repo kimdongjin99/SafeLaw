@@ -10,6 +10,7 @@ class AskLegalQuestionUseCase(
         //val searchResult = db.vectorSearch(question)
         //val groundingData = db.findGroundingDataFromServer(searchResult)
 
+
         // 질문과 grounding 데이터를 기반으로 모델 추론
         return slm.generateAnswer(
             question = question,

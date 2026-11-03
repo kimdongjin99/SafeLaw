@@ -7,6 +7,7 @@ import {
   StyleSheet,
   FlatList,
   KeyboardAvoidingView,
+  NativeModules,
   Platform,
   ActivityIndicator,
 } from 'react-native';
@@ -18,7 +19,14 @@ import {
   getChatSessionById,
   saveChatMessage,
 } from '../services/chatStorage';
-import apiClient from '../api/client';
+
+interface SafeLawNativeModule {
+  ask(question: string): Promise<string>;
+}
+
+const safeLawModule = NativeModules.SafeLawModule as
+  | SafeLawNativeModule
+  | undefined;
 
 interface Props {
   navigation: any;
@@ -66,62 +74,28 @@ export function ChatScreen({ navigation, route }: Props) {
     setIsLoading(true);
 
     try {
-      // API 명세서 기준: POST /api/v1/laws/search
-      const response = await apiClient.post('/api/v1/laws/search', {
-        query: userText,
-      });
-
-      console.log('판례 검색 성공:', response.data);
-
-      const data = response.data;
-      let aiText = '';
-
-      if (data?.answer) {
-        aiText = data.answer;
-      } else if (Array.isArray(data?.laws) && data.laws.length > 0) {
-        aiText = data.laws
-          .map(
-            (item: any, idx: number) =>
-              `[참고 판례 ${idx + 1}] ${item.title || item.caseNumber || ''}\n${
-                item.summary || item.content || item.description || ''
-              }`
-          )
-          .join('\n\n');
-      } else if (Array.isArray(data) && data.length > 0) {
-        aiText = data
-          .map(
-            (item: any, idx: number) =>
-              `[참고 판례 ${idx + 1}] ${item.title || item.caseNumber || ''}\n${
-                item.summary || item.content || item.description || ''
-              }`
-          )
-          .join('\n\n');
-      } else {
-        aiText = typeof data === 'string' ? data : '관련 판례 정보를 성공적으로 조회했습니다.';
+      if (!safeLawModule) {
+        throw new Error('SafeLawModule이 네이티브 앱에 등록되지 않았습니다.');
       }
+
+      const answer = await safeLawModule.ask(userText);
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: aiText,
+        text: answer.trim() || '모델이 빈 답변을 반환했습니다.',
         timestamp: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, aiMsg]);
       await saveChatMessage(sessionId, aiMsg);
-    } catch (error: any) {
-      console.error('Chat API Error Status:', error.response?.status);
-      console.error('Chat API Error Detail:', JSON.stringify(error.response?.data));
-
-      const serverErrorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        '요청 형식이 잘못되었거나 서버 처리 중 오류가 발생했습니다.';
-
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: `오류가 발생했습니다: ${serverErrorMessage}`,
+        text: `모델 실행 오류: ${errorMessage}`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);

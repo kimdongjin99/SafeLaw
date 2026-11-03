@@ -24,7 +24,7 @@ internal data class InferenceProfile(
             microBatchSize = 128,
             generationThreads = 4,
             promptThreads = 4,
-            maxTokens = 128,
+            maxTokens = 160,
         )
 
         private val MEDIUM = InferenceProfile(
@@ -34,7 +34,7 @@ internal data class InferenceProfile(
             microBatchSize = 128,
             generationThreads = 4,
             promptThreads = 4,
-            maxTokens = 128,
+            maxTokens = 192,
         )
 
         private val S7_FE_CELLULAR = InferenceProfile(
@@ -44,7 +44,7 @@ internal data class InferenceProfile(
             microBatchSize = 128,
             generationThreads = 4,
             promptThreads = 4,
-            maxTokens = 160,
+            maxTokens = 224,
         )
 
         private val S7_FE_WIFI = InferenceProfile(
@@ -54,7 +54,7 @@ internal data class InferenceProfile(
             microBatchSize = 256,
             generationThreads = 4,
             promptThreads = 4,
-            maxTokens = 160,
+            maxTokens = 224,
         )
 
         private val HIGH = InferenceProfile(
@@ -64,7 +64,7 @@ internal data class InferenceProfile(
             microBatchSize = 512,
             generationThreads = 4,
             promptThreads = 6,
-            maxTokens = 192,
+            maxTokens = 256,
         )
 
         fun forCurrentDevice(): InferenceProfile = forModel(Build.MODEL).also { profile ->

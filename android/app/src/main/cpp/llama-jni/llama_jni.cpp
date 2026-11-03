@@ -2,6 +2,7 @@
 #include <jni.h>
 #include <android/log.h>
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <mutex>
 #include <string>
@@ -62,6 +63,65 @@ namespace {
         return std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started_at
         ).count();
+    }
+
+    size_t trimmed_end(const std::string &text) {
+        size_t end = text.size();
+        while (end > 0 && std::isspace(static_cast<unsigned char>(text[end - 1]))) {
+            --end;
+        }
+        while (end > 0) {
+            const char last = text[end - 1];
+            if (last == '"' || last == '\'' || last == ')' || last == ']' || last == '}') {
+                --end;
+                continue;
+            }
+            break;
+        }
+        return end;
+    }
+
+    bool ends_with_complete_sentence(const std::string &text) {
+        const size_t end = trimmed_end(text);
+        if (end == 0) {
+            return false;
+        }
+
+        const char last = text[end - 1];
+        if (last == '.' || last == '!' || last == '?') {
+            return true;
+        }
+
+        static constexpr const char *unicode_terminators[] = {"。", "！", "？"};
+        for (const char *terminator: unicode_terminators) {
+            const std::string suffix(terminator);
+            if (end >= suffix.size() && text.compare(end - suffix.size(), suffix.size(), suffix) == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool remove_incomplete_last_sentence(std::string &text) {
+        static constexpr const char *terminators[] = {".", "!", "?", "。", "！", "？"};
+        size_t last_end = std::string::npos;
+        for (const char *terminator: terminators) {
+            const std::string marker(terminator);
+            const size_t position = text.rfind(marker);
+            if (position != std::string::npos) {
+                const size_t candidate_end = position + marker.size();
+                if (last_end == std::string::npos || candidate_end > last_end) {
+                    last_end = candidate_end;
+                }
+            }
+        }
+
+        if (last_end == std::string::npos) {
+            return false;
+        }
+
+        text.erase(last_end);
+        return true;
     }
 
     //모델 메모리 해제
@@ -161,10 +221,15 @@ namespace {
         );
         const int generation_threads = std::clamp(requested_generation_threads, 1, 8);
         const int prompt_threads = std::clamp(requested_prompt_threads, 1, 8);
-        const int safe_max_tokens = std::clamp(max_tokens, 1, 512);
-        if (token_count + safe_max_tokens >= context_size) {
+        constexpr int extension_tokens = 32;
+        const int base_max_tokens = std::clamp(max_tokens, 1, 512);
+        if (token_count + base_max_tokens >= context_size) {
             return "Prompt is too long for the current context size.";
         }
+        const int hard_max_tokens = std::min(
+                base_max_tokens + extension_tokens,
+                context_size - token_count - 1
+        );
 
         //이전에 구한 입력 토큰수로 토큰 벡터를 만듦
         std::vector<llama_token> tokens(token_count);
@@ -193,9 +258,10 @@ namespace {
         //모델 답변 생성을 시작하기 직전에 현재 프롬프트 크기와 추론 설정값을 Android Logcat에 기록
         __android_log_print(
                 ANDROID_LOG_INFO, LOG_TAG,
-                "PERF generation start: prompt_chars=%zu, prompt_tokens=%d, max_tokens=%d, "
+                "PERF generation start: prompt_chars=%zu, prompt_tokens=%d, "
+                "base_max_tokens=%d, hard_max_tokens=%d, "
                 "n_ctx=%d, n_batch=%d, n_ubatch=%d, threads=%d, prompt_threads=%d",
-                formatted_prompt.size(), token_count, safe_max_tokens,
+                formatted_prompt.size(), token_count, base_max_tokens, hard_max_tokens,
                 context_size, batch_size, micro_batch_size,
                 generation_threads, prompt_threads
         );
@@ -222,6 +288,8 @@ namespace {
 
         std::string response;
         int generated_tokens = 0;
+        bool stopped_at_eog = false;
+        bool conditional_extension_started = false;
         llama_batch batch =
                 llama_batch_get_one(
                         tokens.data(),
@@ -229,7 +297,7 @@ namespace {
                         );
 
         //답변 생성 부분, 시간을 기록하며 로그로 출력한다.
-        for (int generated = 0; generated < safe_max_tokens; ++generated) {
+        for (int generated = 0; generated < hard_max_tokens; ++generated) {
             const auto decode_started_at = std::chrono::steady_clock::now();
             if (generated == 0) {
                 __android_log_print(
@@ -257,6 +325,7 @@ namespace {
             //모델이 예측한 후보 중 다음 토큰 하나를 선택하고, 답변 종료 신호라면 생성 반복문을 끝낸다
             const llama_token token = llama_sampler_sample(sampler, context, -1);
             if (llama_vocab_is_eog(vocab, token)) {
+                stopped_at_eog = true;
                 break;
             }
 
@@ -265,7 +334,7 @@ namespace {
                 __android_log_print(
                         ANDROID_LOG_INFO, LOG_TAG,
                         "PERF generation progress: output_tokens=%d/%d",
-                        generated_tokens, safe_max_tokens
+                        generated_tokens, hard_max_tokens
                 );
             }
 
@@ -291,6 +360,45 @@ namespace {
 
             llama_token next_token = token;
             batch = llama_batch_get_one(&next_token, 1);
+
+            if (generated_tokens >= base_max_tokens) {
+                if (ends_with_complete_sentence(response)) {
+                    __android_log_print(
+                            ANDROID_LOG_INFO, LOG_TAG,
+                            "PERF generation stopped at complete sentence: output_tokens=%d",
+                            generated_tokens
+                    );
+                    break;
+                }
+                if (!conditional_extension_started) {
+                    conditional_extension_started = true;
+                    __android_log_print(
+                            ANDROID_LOG_INFO, LOG_TAG,
+                            "PERF conditional extension started: base=%d, hard_limit=%d",
+                            base_max_tokens, hard_max_tokens
+                    );
+                }
+            }
+        }
+
+        const bool hit_incomplete_hard_limit =
+                !stopped_at_eog &&
+                generated_tokens >= hard_max_tokens &&
+                !ends_with_complete_sentence(response);
+        if (hit_incomplete_hard_limit) {
+            const size_t bytes_before = response.size();
+            if (remove_incomplete_last_sentence(response)) {
+                __android_log_print(
+                        ANDROID_LOG_INFO, LOG_TAG,
+                        "PERF incomplete sentence removed: bytes_before=%zu, bytes_after=%zu",
+                        bytes_before, response.size()
+                );
+            } else {
+                __android_log_print(
+                        ANDROID_LOG_WARN, LOG_TAG,
+                        "PERF incomplete sentence kept: no complete sentence boundary found"
+                );
+            }
         }
 
         //모든 모델 계산이 끝날 때까지 기다린 뒤, llama.cpp가 수집한 성능 통계를 가져와
