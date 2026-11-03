@@ -124,6 +124,69 @@ namespace {
         return true;
     }
 
+    bool is_complete_utf8(const std::string &text) {
+        size_t index = 0;
+        while (index < text.size()) {
+            const auto lead = static_cast<unsigned char>(text[index]);
+            size_t sequence_size = 0;
+            if ((lead & 0x80U) == 0) {
+                sequence_size = 1;
+            } else if ((lead & 0xE0U) == 0xC0U) {
+                sequence_size = 2;
+            } else if ((lead & 0xF0U) == 0xE0U) {
+                sequence_size = 3;
+            } else if ((lead & 0xF8U) == 0xF0U) {
+                sequence_size = 4;
+            } else {
+                return false;
+            }
+
+            if (index + sequence_size > text.size()) {
+                return false;
+            }
+            for (size_t offset = 1; offset < sequence_size; ++offset) {
+                const auto continuation =
+                        static_cast<unsigned char>(text[index + offset]);
+                if ((continuation & 0xC0U) != 0x80U) {
+                    return false;
+                }
+            }
+            index += sequence_size;
+        }
+        return true;
+    }
+
+    bool emit_token_bytes(
+            JNIEnv *env,
+            jobject token_callback,
+            jmethodID on_token_method,
+            const std::string &token_bytes
+    ) {
+        if (token_callback == nullptr || on_token_method == nullptr || token_bytes.empty()) {
+            return true;
+        }
+
+        jbyteArray bytes = env->NewByteArray(static_cast<jsize>(token_bytes.size()));
+        if (bytes == nullptr) {
+            return false;
+        }
+        env->SetByteArrayRegion(
+                bytes,
+                0,
+                static_cast<jsize>(token_bytes.size()),
+                reinterpret_cast<const jbyte *>(token_bytes.data())
+        );
+        env->CallVoidMethod(token_callback, on_token_method, bytes);
+        env->DeleteLocalRef(bytes);
+
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            log_error("Token streaming callback failed");
+            return false;
+        }
+        return true;
+    }
+
     //모델 메모리 해제
     void release_model_locked() {
         if (g_model != nullptr) {
@@ -187,7 +250,10 @@ namespace {
             int requested_batch_size,
             int requested_micro_batch_size,
             int requested_generation_threads,
-            int requested_prompt_threads
+            int requested_prompt_threads,
+            JNIEnv *env,
+            jobject token_callback,
+            jmethodID on_token_method
     ) {
         //텍스트 생성 시작 시간 기록
         const auto generation_started_at = std::chrono::steady_clock::now();
@@ -287,9 +353,11 @@ namespace {
         llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
 
         std::string response;
+        std::string pending_stream_bytes;
         int generated_tokens = 0;
         bool stopped_at_eog = false;
         bool conditional_extension_started = false;
+        bool streaming_enabled = token_callback != nullptr && on_token_method != nullptr;
         llama_batch batch =
                 llama_batch_get_one(
                         tokens.data(),
@@ -355,6 +423,18 @@ namespace {
                 );
                 if (piece_size > 0) {
                     response.append(piece.data(), piece_size);
+                    if (streaming_enabled) {
+                        pending_stream_bytes.append(piece.data(), piece_size);
+                        if (is_complete_utf8(pending_stream_bytes)) {
+                            streaming_enabled = emit_token_bytes(
+                                    env,
+                                    token_callback,
+                                    on_token_method,
+                                    pending_stream_bytes
+                            );
+                            pending_stream_bytes.clear();
+                        }
+                    }
                 }
             }
 
@@ -507,7 +587,8 @@ Java_com_safelaw_data_slm_LlamaBridge_generate(
         jint batch_size,
         jint micro_batch_size,
         jint generation_threads,
-        jint prompt_threads
+        jint prompt_threads,
+        jobject token_callback
 ) {
     const char *prompt_chars = env->GetStringUTFChars(prompt, nullptr);
     if (prompt_chars == nullptr) {
@@ -517,6 +598,20 @@ Java_com_safelaw_data_slm_LlamaBridge_generate(
     const std::string prompt_string(prompt_chars);
     env->ReleaseStringUTFChars(prompt, prompt_chars);
 
+    jmethodID on_token_method = nullptr;
+    if (token_callback != nullptr) {
+        jclass callback_class = env->GetObjectClass(token_callback);
+        if (callback_class == nullptr) {
+            return env->NewStringUTF("Failed to initialize token streaming callback.");
+        }
+        on_token_method = env->GetMethodID(callback_class, "onToken", "([B)V");
+        env->DeleteLocalRef(callback_class);
+        if (on_token_method == nullptr) {
+            env->ExceptionClear();
+            return env->NewStringUTF("Failed to find token streaming callback method.");
+        }
+    }
+
     std::lock_guard<std::mutex> lock(g_mutex);
     const std::string result = generate_text(
             prompt_string,
@@ -525,7 +620,10 @@ Java_com_safelaw_data_slm_LlamaBridge_generate(
             batch_size,
             micro_batch_size,
             generation_threads,
-            prompt_threads
+            prompt_threads,
+            env,
+            token_callback,
+            on_token_method
     );
     return env->NewStringUTF(result.c_str());
 }

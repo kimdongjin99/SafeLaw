@@ -3,6 +3,10 @@ package com.safelaw.data.slm
 
 /** Kotlin 코드와 llama.cpp 네이티브 추론 엔진을 연결하는 JNI 브리지입니다. */
 class LlamaBridge {
+    fun interface TokenCallback {
+        fun onToken(tokenBytes: ByteArray)
+    }
+
     companion object {
         init {
             System.loadLibrary("llama_jni")
@@ -21,6 +25,7 @@ class LlamaBridge {
         microBatchSize: Int,
         generationThreads: Int,
         promptThreads: Int,
+        tokenCallback: TokenCallback,
     ): String
 
     /** 로드된 모델과 네이티브 리소스를 해제합니다. */

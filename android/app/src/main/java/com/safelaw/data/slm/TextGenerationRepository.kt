@@ -24,6 +24,7 @@ class TextGenerationRepository(
     override suspend fun generateAnswer(
         question: String,
         groundingData: String,
+        onToken: (String) -> Unit,
     ): String = withContext(Dispatchers.IO) {
         ensureModelLoaded()
 
@@ -45,6 +46,9 @@ class TextGenerationRepository(
             microBatchSize = inferenceProfile.microBatchSize,
             generationThreads = inferenceProfile.generationThreads,
             promptThreads = inferenceProfile.promptThreads,
+            tokenCallback = LlamaBridge.TokenCallback { tokenBytes ->
+                onToken(tokenBytes.toString(Charsets.UTF_8))
+            },
         )
     }
 
