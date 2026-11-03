@@ -22,7 +22,7 @@ class MainApplication : Application(), ReactApplication {
 
   // 온디바이스 법률 AI 관련 의존성 주입
   private val dbRepository by lazy {
-    LegalSearchRepository()
+    LegalSearchRepository(applicationContext)
   }
 
   private val slmRepository by lazy {
