@@ -11,6 +11,7 @@ import com.safelaw.data.db.network.SafeLawApiService
 import com.safelaw.domain.DbRepository
 import io.objectbox.Box
 import io.objectbox.BoxStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -18,17 +19,28 @@ import kotlinx.coroutines.withContext
 
 class LegalSearchRepository(
     context: Context,
-    private val store: BoxStore = MyObjectBox.builder()
-        .androidContext(context.applicationContext)
-        .build(),
-    private val embeddingHelper: OnnxEmbeddingHelper = OnnxEmbeddingHelper(context.applicationContext),
+    // 넘기지 않으면 첫 검색 때 직접 엽니다.
+    store: BoxStore? = null,
+    embeddingHelper: OnnxEmbeddingHelper? = null,
     private val apiService: SafeLawApiService = RetrofitClient.apiService,
     // 검색 과정(캐시 사용 여부, 서버 전송 ID 등)을 밖에서 보고 싶을 때 넘깁니다. (테스트 화면용)
     private val onEvent: (String) -> Unit = {},
 ) : DbRepository {
 
-    private val lawCaseBox: Box<LawCase> = store.boxFor(LawCase::class.java)
-    private val importer = LawCaseImporter(context.applicationContext, store)
+    private val appContext = context.applicationContext
+
+    // DB와 ONNX 모델은 무거워서 앱 시작 때가 아니라 처음 검색할 때 엽니다.
+    private val storeLazy = lazy {
+        store ?: MyObjectBox.builder()
+            .androidContext(appContext)
+            .build()
+    }
+    private val embeddingHelperLazy = lazy { embeddingHelper ?: OnnxEmbeddingHelper(appContext) }
+
+    private val boxStore: BoxStore by storeLazy
+    private val embeddingHelper: OnnxEmbeddingHelper by embeddingHelperLazy
+    private val lawCaseBox: Box<LawCase> by lazy { boxStore.boxFor(LawCase::class.java) }
+    private val importer by lazy { LawCaseImporter(appContext, boxStore) }
 
     // 판례 주입이 끝났는지 기억해서, 두 번째 호출부터는 바로 넘어갑니다.
     private val prepareMutex = Mutex()
@@ -106,8 +118,19 @@ class LegalSearchRepository(
                 "   (진짜: $caseIds / 가짜: $dummyIds)"
         )
 
-        val response = apiService.getLawCaseTexts(LawCaseRequest(ids = mixedIds))
-        check(response.isSuccessful) { "서버 에러 응답 발생 코드: ${response.code()}" }
+        // 서버가 꺼져 있거나 에러가 나도 앱이 죽지 않도록, 판례 없이("") 답변을 이어가게 합니다.
+        val response = try {
+            apiService.getLawCaseTexts(LawCaseRequest(ids = mixedIds))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            report(NETWORK_TAG, " ❌ 서버 연결 실패, 판례 없이 진행합니다: ${e.message}")
+            return@withContext ""
+        }
+        if (!response.isSuccessful) {
+            report(NETWORK_TAG, " ❌ 서버 에러 응답 (코드 ${response.code()}), 판례 없이 진행합니다.")
+            return@withContext ""
+        }
 
         val body = response.body().orEmpty()
         val trueCasesById = body.filter { it.id in targetIds }.associateBy { it.id }
@@ -138,9 +161,12 @@ class LegalSearchRepository(
     }
 
     fun close() {
-        embeddingHelper.close()
-        if (!store.isClosed) {
-            store.close()
+        // 한 번도 검색하지 않았다면 열린 적이 없으니 닫을 것도 없습니다.
+        if (embeddingHelperLazy.isInitialized()) {
+            embeddingHelper.close()
+        }
+        if (storeLazy.isInitialized() && !boxStore.isClosed) {
+            boxStore.close()
         }
     }
 
