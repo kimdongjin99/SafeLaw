@@ -8,8 +8,7 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ErrorCode {
 
-    INVALID_VECTOR(HttpStatus.BAD_REQUEST, "정확히 384차원의 유효한 숫자 벡터를 전송해주세요."),
-    INVALID_TOP_K(HttpStatus.BAD_REQUEST, "topK는 1 이상 10 이하로 지정해주세요."),
+    INVALID_IDS(HttpStatus.BAD_REQUEST, "판례 번호를 1개 이상 30개 이하로 전송해주세요."),
     INVALID_NAME(HttpStatus.BAD_REQUEST, "이름은 1자 이상 30자 이하로 입력해주세요."),
     INVALID_EMAIL(HttpStatus.BAD_REQUEST, "올바른 이메일 주소를 입력해주세요."),
     INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "비밀번호는 8자 이상 64자 이하로 입력해주세요."),
