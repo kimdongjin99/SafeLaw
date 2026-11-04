@@ -3,7 +3,7 @@ package capstone.safelaw.dto;
 /**
  * 회원가입·로그인 성공 응답.
  * 앱은 accessToken을 기기에 저장해두고, 로그인이 필요한 API 호출 시 "Authorization: Bearer {accessToken}" 헤더로 보낸다.
- * 로그아웃은 앱에서 저장한 토큰을 지우면 된다.
+ * 로그아웃은 POST /api/v1/auth/logout을 호출한 뒤 앱에서 저장한 토큰을 지운다.
  */
 public record AuthResponseDto(
         String accessToken,

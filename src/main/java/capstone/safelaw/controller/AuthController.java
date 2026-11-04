@@ -1,5 +1,6 @@
 package capstone.safelaw.controller;
 
+import capstone.safelaw.auth.AuthInterceptor;
 import capstone.safelaw.auth.SocialProvider;
 import capstone.safelaw.dto.AuthResponseDto;
 import capstone.safelaw.dto.LoginRequestDto;
@@ -13,13 +14,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/auth")
-@Tag(name = "Auth", description = "회원가입·로그인 API")
+@Tag(name = "Auth", description = "회원가입·로그인·로그아웃 API")
 @RequiredArgsConstructor
 public class AuthController {
 
@@ -42,5 +44,13 @@ public class AuthController {
     @PostMapping("/google")
     public ResponseEntity<AuthResponseDto> google(@RequestBody SocialLoginRequestDto request) {
         return ResponseEntity.ok(authService.socialLogin(SocialProvider.GOOGLE, request));
+    }
+
+    @Operation(summary = "로그아웃", description = "요청에 사용한 토큰을 만료 전이어도 쓸 수 없게 합니다. 이 기기의 로그인만 풀리고, 앱은 저장된 토큰도 함께 지우면 됩니다.")
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+                                       @RequestAttribute(AuthInterceptor.TOKEN) String token) {
+        authService.logout(userId, token);
+        return ResponseEntity.noContent().build();
     }
 }

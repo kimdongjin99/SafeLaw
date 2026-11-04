@@ -84,6 +84,13 @@ Content-Type: application/json
   "newPassword": "newpassword456"
 }
 
+### 로그아웃 → 204 (이후 같은 토큰으로 요청하면 401. 아래 요청을 테스트하려면 다시 로그인)
+POST http://localhost:8080/api/v1/auth/logout
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 로그아웃 (에러) - 토큰 없음 → 401 UNAUTHORIZED
+POST http://localhost:8080/api/v1/auth/logout
+
 ### 회원 탈퇴 → 204 (이후 같은 토큰으로 요청하면 401)
 DELETE http://localhost:8080/api/v1/users/me
 Authorization: Bearer {{login.response.body.accessToken}}

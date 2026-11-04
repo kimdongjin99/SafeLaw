@@ -3,6 +3,7 @@ package capstone.safelaw.auth;
 import capstone.safelaw.config.JwtProperties;
 import capstone.safelaw.exception.ApiException;
 import capstone.safelaw.exception.ErrorCode;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -14,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 
 // 로그인 토큰(JWT, HS256) 발급·검증. 토큰에는 회원 ID만 담는다.
 @Slf4j
@@ -43,6 +45,8 @@ public class JwtProvider {
     public String createAccessToken(long userId) {
         Instant now = Instant.now();
         return Jwts.builder()
+                // 같은 초에 다시 로그인해도 로그아웃한 토큰과 겹치지 않도록 토큰마다 고유 ID를 넣는다.
+                .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(userId))
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(validity)))
@@ -53,14 +57,22 @@ public class JwtProvider {
     // 서명이 틀렸거나 만료된 토큰이면 UNAUTHORIZED
     public long parseUserId(String token) {
         try {
-            String subject = Jwts.parser().verifyWith(key).build()
-                    .parseSignedClaims(token)
-                    .getPayload()
-                    .getSubject();
-            return Long.parseLong(subject);
+            return Long.parseLong(parseClaims(token).getSubject());
         } catch (JwtException | IllegalArgumentException e) {
             throw new ApiException(ErrorCode.UNAUTHORIZED);
         }
+    }
+
+    public Instant getExpiration(String token) {
+        try {
+            return parseClaims(token).getExpiration().toInstant();
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.UNAUTHORIZED);
+        }
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
     }
 
     public long getValiditySeconds() {

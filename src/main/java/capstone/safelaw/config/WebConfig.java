@@ -15,6 +15,6 @@ public class WebConfig implements WebMvcConfigurer {
     // 로그인이 필요한 API 경로. 판례 검색·모델 배포 정보는 로그인 없이 사용한다.
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(authInterceptor).addPathPatterns("/api/v1/users/**");
+        registry.addInterceptor(authInterceptor).addPathPatterns("/api/v1/users/**", "/api/v1/auth/logout");
     }
 }

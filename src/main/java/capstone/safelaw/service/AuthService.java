@@ -13,6 +13,7 @@ import capstone.safelaw.dto.SocialLoginRequestDto;
 import capstone.safelaw.dto.UserDto;
 import capstone.safelaw.exception.ApiException;
 import capstone.safelaw.exception.ErrorCode;
+import capstone.safelaw.repository.RevokedTokenRepository;
 import capstone.safelaw.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -30,6 +31,7 @@ public class AuthService {
     private static final String DEFAULT_SOCIAL_NAME = "사용자";
 
     private final UserRepository userRepository;
+    private final RevokedTokenRepository revokedTokenRepository;
     private final JwtProvider jwtProvider;
     private final PasswordEncoder passwordEncoder;
     private final LoginAttemptLimiter loginAttemptLimiter;
@@ -37,9 +39,11 @@ public class AuthService {
     // 없는 이메일로 로그인해도 비밀번호 검사 시간을 똑같이 써서, 응답 시간으로 가입 여부를 알 수 없게 한다.
     private final String dummyPasswordHash;
 
-    public AuthService(UserRepository userRepository, JwtProvider jwtProvider, PasswordEncoder passwordEncoder,
+    public AuthService(UserRepository userRepository, RevokedTokenRepository revokedTokenRepository,
+                       JwtProvider jwtProvider, PasswordEncoder passwordEncoder,
                        LoginAttemptLimiter loginAttemptLimiter, SocialTokenVerifier socialTokenVerifier) {
         this.userRepository = userRepository;
+        this.revokedTokenRepository = revokedTokenRepository;
         this.jwtProvider = jwtProvider;
         this.passwordEncoder = passwordEncoder;
         this.loginAttemptLimiter = loginAttemptLimiter;
@@ -132,6 +136,11 @@ public class AuthService {
 
         log.info("소셜 회원가입 완료: provider={}, userId={}", provider, user.id());
         return issueToken(user);
+    }
+
+    public void logout(long userId, String token) {
+        revokedTokenRepository.revoke(token, jwtProvider.getExpiration(token));
+        log.info("로그아웃: userId={}", userId);
     }
 
     private AuthResponseDto issueToken(User user) {
