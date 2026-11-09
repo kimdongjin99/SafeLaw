@@ -11,9 +11,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   User, Bell, Shield, HelpCircle,
-  Info, ChevronRight, Database, LogOut
+  Info, ChevronRight, Database, LogOut, Lock
 } from 'lucide-react-native';
 import EncryptedStorage from 'react-native-encrypted-storage';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { colors } from '../theme/colors';
 import apiClient from '../api/client';
 
@@ -22,14 +23,24 @@ interface Props {
 }
 
 export function SettingsScreen({ navigation }: Props) {
-  const [userData, setUserData] = useState({ name: '사용자', email: '로딩 중...' });
+  // provider 필드 추가 및 기본 상태 설정
+  const [userData, setUserData] = useState({ 
+    name: '사용자', 
+    email: '로딩 중...',
+    provider: 'EMAIL' 
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
         const response = await apiClient.get('/api/v1/users/me');
-        setUserData({ name: response.data.name, email: response.data.email });
+        setUserData({ 
+          name: response.data.name, 
+          // 소셜 로그인은 email이 null일 수 있으므로 null 병합 처리[cite: 17]
+          email: response.data.email ?? '소셜 계정 로그인',
+          provider: response.data.provider
+        });
       } catch (error: any) {
         console.error('사용자 정보 조회 실패:', error);
         
@@ -39,7 +50,7 @@ export function SettingsScreen({ navigation }: Props) {
           return;
         }
         
-        setUserData({ name: '알 수 없음', email: '정보를 불러오지 못했습니다.' });
+        setUserData({ name: '알 수 없음', email: '정보를 불러오지 못했습니다.', provider: 'EMAIL' });
       } finally {
         setIsLoading(false);
       }
@@ -55,9 +66,26 @@ export function SettingsScreen({ navigation }: Props) {
         text: '로그아웃', 
         style: 'destructive', 
         onPress: async () => {
-          // 보안 저장소에서 토큰 삭제 후 로그인 화면으로 이동
-          await EncryptedStorage.removeItem('accessToken');
-          navigation.replace('Login');
+          try {
+            // 1. 백엔드 로그아웃 API 호출[cite: 15]
+            await apiClient.post('/api/v1/auth/logout');
+          } catch (error: any) {
+            // 401(UNAUTHORIZED) 등 에러가 발생해도 정상 로그아웃 흐름 동일 진행[cite: 16]
+            console.log('Logout API Status:', error.response?.status || error.message);
+          } finally {
+            // 2. 보안 저장소에서 토큰 삭제[cite: 16]
+            await EncryptedStorage.removeItem('accessToken');
+            
+            // 3. Google 소셜 로그인 세션 초기화 (선택적 예외 처리)
+            try {
+              await GoogleSignin.signOut();
+            } catch (e) {
+              console.log('Google SignOut Error:', e);
+            }
+
+            // 4. 로그인 화면으로 이동[cite: 16]
+            navigation.replace('Login');
+          }
         }
       }
     ]);
@@ -108,8 +136,16 @@ export function SettingsScreen({ navigation }: Props) {
           <SettingItem
             icon={<User color={colors.foreground} size={20} />}
             label="프로필 관리"
-            description="이름, 비밀번호 등 정보 수정"
+            description="이름 등 정보 수정"
           />
+          {/* EMAIL 가입자인 경우에만 비밀번호 변경 메뉴 노출[cite: 17] */}
+          {userData.provider === 'EMAIL' && (
+            <SettingItem
+              icon={<Lock color={colors.foreground} size={20} />}
+              label="비밀번호 변경"
+              description="계정 비밀번호 수정"
+            />
+          )}
           <SettingItem
             icon={<Bell color={colors.foreground} size={20} />}
             label="알림 설정"
