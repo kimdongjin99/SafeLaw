@@ -26,11 +26,11 @@ class MeanPoolingTest {
 
     @Test
     fun meanPool_resultHasUnitLength() {
-        val tokenEmbeddings = Array(5) { i -> FloatArray(384) { d -> (i + 1) * 0.01f * (d % 7 - 3) } }
+        val tokenEmbeddings = Array(5) { i -> FloatArray(768) { d -> (i + 1) * 0.01f * (d % 7 - 3) } }
 
         val result = OnnxEmbeddingHelper.meanPoolAndNormalize(tokenEmbeddings, LongArray(5) { 1L })
 
-        assertEquals(384, result.size)
+        assertEquals(768, result.size)
         assertEquals(1.0, sqrt(result.sumOf { (it * it).toDouble() }), 1e-5)
     }
 }

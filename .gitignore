@@ -12,3 +12,6 @@ local.properties
 
 # assets의 JSON(판례 데이터 727MB, 미사용 tokenizer.json)은 올리지 않음
 /android/app/src/main/assets/*.json
+# KR-SBERT 모델(117MB)은 GitHub 100MB 제한을 넘어서 올리지 않음 → Colab_code/krsbert_embedding.ipynb로 생성
+/android/app/src/main/assets/*.onnx
+/android/app/src/main/assets/*.bin
