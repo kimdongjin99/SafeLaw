@@ -82,9 +82,11 @@ class LegalSearchRepository(
         report(CACHE_TAG, " [캐시 X] ONNX 모델로 새로 임베딩 계산 중 -> \"$question\"")
         val queryEmbedding = embeddingHelper.embed(question)
 
-        val caseIds = lawCaseBox.query(LawCase_.embedding.nearestNeighbors(queryEmbedding, SEARCH_LIMIT))
+        // HNSW는 근사 검색이라 5개만 찾으면 진짜 상위 판례를 놓칩니다.
+        // 후보를 넉넉히 찾은 뒤 가까운 순으로 SEARCH_LIMIT개만 씁니다. (결과는 거리 오름차순)
+        val caseIds = lawCaseBox.query(LawCase_.embedding.nearestNeighbors(queryEmbedding, CANDIDATE_COUNT))
             .build()
-            .use { query -> query.findIdsWithScores().map { it.id } }
+            .use { query -> query.findIdsWithScores().take(SEARCH_LIMIT).map { it.id } }
 
         report(SEARCH_TAG, " [임베딩 검색 성공] 질문: \"$question\" -> 유사한 판례 ID: $caseIds")
         if (caseIds.isNotEmpty()) {
@@ -175,6 +177,7 @@ class LegalSearchRepository(
         private const val NETWORK_TAG = "SafeLaw_Network"
         private const val CACHE_TAG = "SafeLaw_Cache"
         private const val SEARCH_LIMIT = 5
+        private const val CANDIDATE_COUNT = 100
         private const val DUMMY_COUNT = 10
     }
 }

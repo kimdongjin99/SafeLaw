@@ -8,8 +8,9 @@ import java.nio.LongBuffer
 import kotlin.math.sqrt
 
 /**
- * sentence-transformers/all-MiniLM-L6-v2 ONNX 모델로 문장을 384차원 벡터로 바꿉니다.
- * criminal_law_data.json의 판례 임베딩과 같은 모델·같은 방식(평균 풀링 + 정규화)이어야 검색이 맞습니다.
+ * KR-SBERT(snunlp/KR-SBERT-V40K-klueNLI-augSTS) ONNX 모델로 문장을 768차원 벡터로 바꿉니다.
+ * 판례 임베딩 파일과 같은 모델·같은 방식(평균 풀링 + 정규화)이어야 검색이 맞습니다.
+ * 모델·vocab·판례 임베딩은 Colab_code/krsbert_embedding.ipynb로 만듭니다.
  */
 class OnnxEmbeddingHelper(context: Context) {
 
@@ -27,7 +28,7 @@ class OnnxEmbeddingHelper(context: Context) {
     }
 
     /**
-     * 유저의 텍스트 질문을 받아 384차원 FloatArray 벡터로 변환하는 함수
+     * 유저의 텍스트 질문을 받아 768차원 FloatArray 벡터로 변환하는 함수
      */
     fun embed(text: String): FloatArray {
         val encoding = tokenizer.encode(text)
@@ -42,7 +43,7 @@ class OnnxEmbeddingHelper(context: Context) {
                         "token_type_ids" to tokenTypeIds,
                     )
                     session.run(inputs).use { output ->
-                        // last_hidden_state: [1, 토큰 수, 384]
+                        // last_hidden_state: [1, 토큰 수, 768]
                         @Suppress("UNCHECKED_CAST")
                         val tokenEmbeddings = (output[0].value as Array<Array<FloatArray>>)[0]
                         return meanPoolAndNormalize(tokenEmbeddings, encoding.attentionMask)
@@ -57,7 +58,7 @@ class OnnxEmbeddingHelper(context: Context) {
     }
 
     companion object {
-        private const val MODEL_FILE_NAME = "model_qint8_arm64.onnx"
+        private const val MODEL_FILE_NAME = "kr_sbert_qint8.onnx"
         private const val VOCAB_FILE_NAME = "vocab.txt"
 
         /** 토큰별 벡터를 평균 내고(패딩 제외) 길이가 1이 되도록 정규화합니다. */
