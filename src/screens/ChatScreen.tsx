@@ -25,6 +25,15 @@ interface Props {
   route: any;
 }
 
+// 서버 응답 타입[cite: 14]
+interface LawTextItem {
+  id: number;
+  caseName: string;
+  caseNum: string;
+  courtName: string;
+  content: string;
+}
+
 export function ChatScreen({ navigation, route }: Props) {
   const existingSessionId = route.params?.sessionId;
   const [sessionId] = useState<string>(
@@ -47,6 +56,13 @@ export function ChatScreen({ navigation, route }: Props) {
     }
   }, [existingSessionId]);
 
+  // (가상) 온디바이스 벡터 검색 함수
+  // 실제 프로젝트의 벡터 검색 로직으로 대체해야 합니다.
+  const searchOnDeviceVectorDb = async (query: string): Promise<number[]> => {
+    // 예시: 기기 내에서 검색한 진짜 판례 ID 배열 순위 반환
+    return [107, 122165]; 
+  };
+
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -66,44 +82,45 @@ export function ChatScreen({ navigation, route }: Props) {
     setIsLoading(true);
 
     try {
-      // API 명세서 기준: POST /api/v1/laws/search
-      const response = await apiClient.post('/api/v1/laws/search', {
-        query: userText,
-      });
+      // 1. 기기 안에서 벡터 검색으로 판례 번호와 유사도 순위 획득[cite: 14]
+      const realRankedIds = await searchOnDeviceVectorDb(userText);
 
-      console.log('판례 검색 성공:', response.data);
-
-      const data = response.data;
       let aiText = '';
 
-      if (data?.answer) {
-        aiText = data.answer;
-      } else if (Array.isArray(data?.laws) && data.laws.length > 0) {
-        aiText = data.laws
-          .map(
-            (item: any, idx: number) =>
-              `[참고 판례 ${idx + 1}] ${item.title || item.caseNumber || ''}\n${
-                item.summary || item.content || item.description || ''
-              }`
-          )
-          .join('\n\n');
-      } else if (Array.isArray(data) && data.length > 0) {
-        aiText = data
-          .map(
-            (item: any, idx: number) =>
-              `[참고 판례 ${idx + 1}] ${item.title || item.caseNumber || ''}\n${
-                item.summary || item.content || item.description || ''
-              }`
-          )
-          .join('\n\n');
+      if (realRankedIds.length === 0) {
+        aiText = '관련된 판례를 찾을 수 없습니다.';
       } else {
-        aiText = typeof data === 'string' ? data : '관련 판례 정보를 성공적으로 조회했습니다.';
+        // 2. 가짜 번호를 섞어 총 1~30개 범위로 생성[cite: 14]
+        const dummyIds = [90001, 999999, 12345, 67890]; 
+        const mixedIds = Array.from(new Set([...realRankedIds, ...dummyIds])).slice(0, 30);
+
+        // 3. 판례 본문 조회 API 호출 (검색 x, 본문만 요청)[cite: 14, 16]
+        const response = await apiClient.post<LawTextItem[]>('/api/v1/laws/texts', {
+          ids: mixedIds,
+        });
+
+        // 4. 응답에서 가짜 번호 판례를 버리고 기존 순위대로 재정렬[cite: 14]
+        const textMap = new Map<number, LawTextItem>(
+          response.data.map((item) => [item.id, item])
+        );
+
+        const finalResults = realRankedIds
+          .map((id) => textMap.get(id))
+          .filter((item): item is LawTextItem => item !== undefined);
+
+        // 응답 텍스트 포매팅 (새로운 응답 필드 적용)[cite: 14]
+        aiText = finalResults
+          .map(
+            (item, idx) =>
+              `[참고 판례 ${idx + 1}] ${item.caseName || '제목 없음'} (${item.caseNum})\n재판소: ${item.courtName}\n\n${item.content}`
+          )
+          .join('\n\n---\n\n');
       }
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: aiText,
+        text: aiText || '관련 판례 정보를 성공적으로 조회했습니다.',
         timestamp: new Date().toISOString(),
       };
 
@@ -111,17 +128,15 @@ export function ChatScreen({ navigation, route }: Props) {
       await saveChatMessage(sessionId, aiMsg);
     } catch (error: any) {
       console.error('Chat API Error Status:', error.response?.status);
-      console.error('Chat API Error Detail:', JSON.stringify(error.response?.data));
-
-      const serverErrorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        '요청 형식이 잘못되었거나 서버 처리 중 오류가 발생했습니다.';
+      
+      // 분기를 message가 아닌 code로 처리
+      const errorCode = error.response?.data?.code || 'UNKNOWN_ERROR';
+      const errorMessage = error.response?.data?.message || '요청 형식이 잘못되었거나 서버 오류가 발생했습니다.';
 
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: `오류가 발생했습니다: ${serverErrorMessage}`,
+        text: `오류가 발생했습니다 [${errorCode}]: ${errorMessage}`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);

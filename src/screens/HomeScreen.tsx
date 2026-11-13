@@ -9,9 +9,10 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Shield, Lock, Zap, MessageSquare, Download } from 'lucide-react-native';
+import { Shield, Lock, Zap, MessageSquare, Download, Settings } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import apiClient from '../api/client';
+import EncryptedStorage from 'react-native-encrypted-storage';
 
 interface Props {
   navigation: any;
@@ -25,7 +26,6 @@ export function HomeScreen({ navigation }: Props) {
   useEffect(() => {
     const initializeHome = async () => {
       try {
-        // 인터셉터에서 토큰을 자동 주입하므로 바로 엔드포인트만 호출합니다
         const userRes = await apiClient.get('/api/v1/users/me');
         setUserName(userRes.data.name);
 
@@ -33,8 +33,11 @@ export function HomeScreen({ navigation }: Props) {
         setModelVersion(modelRes.data.version);
       } catch (error: any) {
         console.error('API 연동 에러:', error);
+        
+        // 401 UNAUTHORIZED 에러 처리: 토큰 만료 또는 삭제된 토큰
         if (error.response?.status === 401) {
           Alert.alert('알림', '로그인이 만료되었습니다. 다시 로그인해주세요.');
+          await EncryptedStorage.removeItem('accessToken');
           navigation.replace('Login');
         }
       } finally {
@@ -57,9 +60,20 @@ export function HomeScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
-          <View style={styles.logoBox}>
-            <Shield color={colors.white} size={32} />
+          <View style={styles.headerTop}>
+            <View style={styles.logoBox}>
+              <Shield color={colors.white} size={32} />
+            </View>
+            {/* 설정 화면(SettingsScreen) 이동 버튼 */}
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => navigation.navigate('Settings')}
+              activeOpacity={0.7}
+            >
+              <Settings color={colors.foreground} size={24} />
+            </TouchableOpacity>
           </View>
+
           <Text style={styles.title}>
             {userName ? `${userName}님,\n환영합니다` : '법률 AI 어시스턴트'}
           </Text>
@@ -129,9 +143,19 @@ const styles = StyleSheet.create({
   center: { justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingHorizontal: 24, paddingBottom: 32 },
   header: { paddingTop: 40, paddingBottom: 24 },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   logoBox: {
     width: 64, height: 64, backgroundColor: colors.primary,
-    borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+    borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+  },
+  settingsBtn: {
+    padding: 8,
+    borderRadius: 8,
   },
   title: { fontSize: 26, fontWeight: '700', color: colors.foreground, marginBottom: 8, lineHeight: 34 },
   subtitle: { fontSize: 14, color: colors.mutedForeground },
