@@ -28,6 +28,7 @@ build/
 .idea
 .gradle
 local.properties
+android/gradle/gradle-daemon-jvm.properties
 *.iml
 *.hprof
 .cxx/
@@ -40,6 +41,7 @@ local.properties
 node_modules/
 npm-debug.log
 yarn-error.log
+metro*.log
 
 # fastlane
 #
@@ -73,3 +75,9 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Local SLM input/output test UI
+/App.slm-test.tsx
+
+# Local model and legal-data assets
+/android/app/src/main/assets/

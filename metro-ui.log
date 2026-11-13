@@ -1,0 +1,20 @@
+
+> SafeLaw@0.0.1 start
+> react-native start --reset-cache
+
+
+Welcome to React Native v0.86
+Starting dev server on http://localhost:8081
+
+error listen EADDRINUSE: address already in use :::8081.
+Error: listen EADDRINUSE: address already in use :::8081
+    at Server.setupListenHandle [as _listen2] (node:net:2328:16)
+    at listenInCluster (node:net:2437:12)
+    at Server.listen (node:net:2562:7)
+    at C:\Projects\SafeLaw_SLM\node_modules\metro\src\index.flow.js:455:14
+    at new Promise (<anonymous>)
+    at earlyPortCheck (C:\Projects\SafeLaw_SLM\node_modules\metro\src\index.flow.js:451:11)
+    at Object.runServer (C:\Projects\SafeLaw_SLM\node_modules\metro\src\index.flow.js:201:9)
+    at Object.runServer [as func] (C:\Projects\SafeLaw_SLM\node_modules\@react-native\community-cli-plugin\dist\commands\start\runServer.js:147:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Command.handleAction (C:\Projects\SafeLaw_SLM\node_modules\@react-native-community\cli\build\index.js:139:9)

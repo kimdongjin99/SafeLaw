@@ -1,0 +1,5 @@
+# 사용 중인 llama.cpp 버전과 로컬 EXAONE 호환 패치 내용을 기록
+
+Source: https://github.com/ggml-org/llama.cpp
+Commit: fd41bf65a2e0013b1ecafa832f8ce6f18b1753e8
+Local patch: EXAONE legacy layer_norm_epsilon metadata compatibility
