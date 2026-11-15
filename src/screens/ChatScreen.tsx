@@ -7,6 +7,7 @@ import {
   StyleSheet,
   FlatList,
   KeyboardAvoidingView,
+  NativeModules,
   Platform,
   ActivityIndicator,
 } from 'react-native';
@@ -18,7 +19,14 @@ import {
   getChatSessionById,
   saveChatMessage,
 } from '../services/chatStorage';
-import apiClient from '../api/client';
+
+interface SafeLawNativeModule {
+  ask(question: string): Promise<string>;
+}
+
+const safeLawModule = NativeModules.SafeLawModule as
+  | SafeLawNativeModule
+  | undefined;
 
 interface Props {
   navigation: any;
@@ -82,6 +90,11 @@ export function ChatScreen({ navigation, route }: Props) {
     setIsLoading(true);
 
     try {
+      if (!safeLawModule) {
+        throw new Error('SafeLawModule이 네이티브 앱에 등록되지 않았습니다.');
+      }
+
+      /* origin/main 판례 원문 직접 조회 구현
       // 1. 기기 안에서 벡터 검색으로 판례 번호와 유사도 순위 획득[cite: 14]
       const realRankedIds = await searchOnDeviceVectorDb(userText);
 
@@ -116,16 +129,31 @@ export function ChatScreen({ navigation, route }: Props) {
           )
           .join('\n\n---\n\n');
       }
+      */
+
+      const answer = await safeLawModule.ask(userText);
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: aiText || '관련 판례 정보를 성공적으로 조회했습니다.',
+        text: answer.trim() || '모델이 빈 답변을 반환했습니다.',
+        // origin/main: text: aiText || '관련 판례 정보를 성공적으로 조회했습니다.',
         timestamp: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, aiMsg]);
       await saveChatMessage(sessionId, aiMsg);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: `모델 실행 오류: ${errorMessage}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      /* origin/main HTTP API 오류 처리 구현
     } catch (error: any) {
       console.error('Chat API Error Status:', error.response?.status);
       
@@ -139,6 +167,8 @@ export function ChatScreen({ navigation, route }: Props) {
         text: `오류가 발생했습니다 [${errorCode}]: ${errorMessage}`,
         timestamp: new Date().toISOString(),
       };
+      */
+
       setMessages((prev) => [...prev, errorMsg]);
       await saveChatMessage(sessionId, errorMsg);
     } finally {

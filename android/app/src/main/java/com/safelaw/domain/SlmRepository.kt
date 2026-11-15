@@ -4,6 +4,7 @@ interface SlmRepository {
 
     suspend fun generateAnswer(
         question: String,
-        groundingData: String,
+        groundingData: GroundingData,
+        onToken: (String) -> Unit,
     ): String
 }

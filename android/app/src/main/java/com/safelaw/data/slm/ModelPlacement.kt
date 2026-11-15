@@ -2,21 +2,59 @@
 package com.safelaw.data.slm
 
 import android.content.Context
+import android.util.Log
 import java.io.File
 
 internal class ModelPlacement(context: Context) {
     private val appContext = context.applicationContext
 
-    /** 에뮬레이터에 미리 복사한 개발용 GGUF 파일을 반환합니다. */
+    /** APK asset에 포함된 시험용 GGUF를 앱 내부 저장소로 복사하고 파일 경로를 반환합니다. */
     fun getLocalDevelopmentModel(): File {
-        val externalRoot = checkNotNull(appContext.getExternalFilesDir(null)) {
-            "앱 전용 외부 저장소를 사용할 수 없습니다."
-        }
-        val modelDir = File(externalRoot, "models")
+        val modelDir = File(appContext.noBackupFilesDir, "models")
         check(modelDir.isDirectory || modelDir.mkdirs()) {
             "모델 저장 폴더를 만들 수 없습니다: ${modelDir.absolutePath}"
         }
         val modelFile = File(modelDir, MODEL_FILE_NAME)
+        val temporaryFile = File(modelDir, "$MODEL_FILE_NAME.part")
+        val assetLength = appContext.assets.openFd(MODEL_ASSET_PATH).use { it.length }
+
+        if (modelFile.isFile && modelFile.canRead() && modelFile.length() == assetLength) {
+            Log.i(LOG_TAG, "Using copied model: ${modelFile.absolutePath}")
+            return modelFile
+        }
+
+        Log.i(
+            LOG_TAG,
+            "Copying bundled model from assets ($assetLength bytes) to ${modelFile.absolutePath}",
+        )
+
+        if (temporaryFile.exists()) {
+            check(temporaryFile.delete()) {
+                "이전 임시 모델 파일을 삭제할 수 없습니다: ${temporaryFile.absolutePath}"
+            }
+        }
+
+        appContext.assets.open(MODEL_ASSET_PATH).buffered(MODEL_COPY_BUFFER_SIZE).use { input ->
+            temporaryFile.outputStream().buffered(MODEL_COPY_BUFFER_SIZE).use { output ->
+                input.copyTo(output, MODEL_COPY_BUFFER_SIZE)
+            }
+        }
+
+        check(temporaryFile.length() == assetLength) {
+            temporaryFile.delete()
+            "APK에서 복사한 모델 크기가 올바르지 않습니다."
+        }
+
+        if (modelFile.exists()) {
+            check(modelFile.delete()) {
+                "기존 모델 파일을 교체할 수 없습니다: ${modelFile.absolutePath}"
+            }
+        }
+        check(temporaryFile.renameTo(modelFile)) {
+            "복사한 모델을 최종 위치로 이동하지 못했습니다: ${modelFile.absolutePath}"
+        }
+
+        Log.i(LOG_TAG, "Bundled model copy completed: ${modelFile.absolutePath}")
 
         check(modelFile.isFile && modelFile.canRead()) {
             "GGUF 모델을 찾거나 읽을 수 없습니다: ${modelFile.absolutePath}"
@@ -89,6 +127,9 @@ internal class ModelPlacement(context: Context) {
     */
 
     companion object {
+        private const val LOG_TAG = "SafeLawModel"
+        private const val MODEL_ASSET_PATH = "models/safe-law-exaone-v3-q4_k_m.gguf"
+        private const val MODEL_COPY_BUFFER_SIZE = 8 * 1024 * 1024
         const val MODEL_FILE_NAME = "safe-law-exaone-v3-q4_k_m.gguf"
 
         // 운영용 Hugging Face 다운로드 코드를 활성화할 때 사용합니다.
