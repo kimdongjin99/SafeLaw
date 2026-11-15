@@ -42,6 +42,21 @@ class SafeLawModule (
     }
 
     @ReactMethod
+    fun getGroundingData(
+        question: String,
+        promise: Promise,
+    ) {
+        askingScope.launch {
+            try {
+                val groundingData = askLegalQuestionUseCase.getGroundingData(question)
+                promise.resolve(groundingData)
+            } catch (error: Throwable) {
+                promise.reject("E_GROUNDING", error.message, error)
+            }
+        }
+    }
+
+    @ReactMethod
     fun askStreaming(
         question: String,
         requestId: String,

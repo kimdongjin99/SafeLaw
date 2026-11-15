@@ -5,13 +5,18 @@ class AskLegalQuestionUseCase(
     private val slm: SlmRepository,
 ){
 
+    suspend fun getGroundingData(question: String): String {
+        val searchHits = db.vectorSearch(question)
+        return db.findGroundingDataFromServer(searchHits.map { it.caseId }).precedents
+    }
+
     suspend fun ask(
         question: String,
         onToken: (String) -> Unit = {},
     ): String {
         // DB에서 벡터 검색 후 서버에서 grounding 데이터 조회
-        val searchResult = db.vectorSearch(question)
-        val groundingData = db.findGroundingDataFromServer(searchResult)
+        val searchHits = db.vectorSearch(question)
+        val groundingData = db.findGroundingDataFromServer(searchHits.map { it.caseId })
 
 
         // 질문과 grounding 데이터를 기반으로 모델 추론

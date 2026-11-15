@@ -10,6 +10,9 @@ import com.safelaw.data.db.network.LawCaseResponse
 import com.safelaw.data.db.network.RetrofitClient
 import com.safelaw.data.db.network.SafeLawApiService
 import com.safelaw.domain.DbRepository
+import com.safelaw.domain.GroundingData
+import com.safelaw.domain.LegalSearchHit
+import com.safelaw.domain.PrecedentReference
 import io.objectbox.Box
 import io.objectbox.BoxStore
 import kotlinx.coroutines.CancellationException
@@ -65,19 +68,19 @@ class LegalSearchRepository(
     }
 
     /**
-     * 🔍 질문을 임베딩한 뒤 벡터 검색으로 가장 유사한 판례 ID를 유사도 순으로 반환합니다.
+     * 🔍 질문을 임베딩한 뒤 판례 ID와 HNSW 거리를 가까운 순서로 반환합니다.
      * 이전 질문과 충분히 비슷하면 임베딩·검색 없이 이전 결과를 재사용합니다.
      */
-    override suspend fun vectorSearch(question: String): List<Long> = withContext(Dispatchers.Default) {
+    override suspend fun vectorSearch(question: String): List<LegalSearchHit> = withContext(Dispatchers.Default) {
         prepare()
 
         searchResultCache.findSimilarQuestion(question)?.let { hit ->
             report(
                 CACHE_TAG,
                 " [캐시 O] 비슷한 이전 질문 재사용 (자카드 ${"%.2f".format(hit.similarity)}) " +
-                    "\"$question\" ≈ \"${hit.cachedQuestion}\" -> 판례 ID: ${hit.caseIds}"
+                    "\"$question\" ≈ \"${hit.cachedQuestion}\" -> 검색 결과: ${hit.searchHits}"
             )
-            return@withContext hit.caseIds
+            return@withContext hit.searchHits
         }
 
         report(CACHE_TAG, " [캐시 X] ONNX 모델로 새로 임베딩 계산 중 -> \"$question\"")
@@ -85,15 +88,24 @@ class LegalSearchRepository(
 
         // HNSW는 근사 검색이라 5개만 찾으면 진짜 상위 판례를 놓칩니다.
         // 후보를 넉넉히 찾은 뒤 가까운 순으로 SEARCH_LIMIT개만 씁니다. (결과는 거리 오름차순)
-        val caseIds = lawCaseBox.query(LawCase_.embedding.nearestNeighbors(queryEmbedding, CANDIDATE_COUNT))
+        val searchHits = lawCaseBox.query(LawCase_.embedding.nearestNeighbors(queryEmbedding, CANDIDATE_COUNT))
             .build()
-            .use { query -> query.findIdsWithScores().take(SEARCH_LIMIT).map { it.id } }
+            .use { query ->
+                query.findIdsWithScores()
+                    .take(SEARCH_LIMIT)
+                    .map { result ->
+                        LegalSearchHit(
+                            caseId = result.id,
+                            distance = result.score,
+                        )
+                    }
+            }
 
-        report(SEARCH_TAG, " [임베딩 검색 성공] 질문: \"$question\" -> 유사한 판례 ID: $caseIds")
-        if (caseIds.isNotEmpty()) {
-            searchResultCache.putSearchResult(question, caseIds)
+        report(SEARCH_TAG, " [임베딩 검색 성공] 질문: \"$question\" -> 검색 결과: $searchHits")
+        if (searchHits.isNotEmpty()) {
+            searchResultCache.putSearchResult(question, searchHits)
         }
-        caseIds
+        searchHits
     }
 
     /**
@@ -101,9 +113,9 @@ class LegalSearchRepository(
      * 응답에서 진짜 판례 원문만 남겨 검색 순서대로 이어 붙여 반환합니다.
      * 같은 판례 ID 목록으로 받아둔 원문이 캐시에 있으면 서버에 요청하지 않습니다.
      */
-    override suspend fun findGroundingDataFromServer(caseIds: List<Long>): String = withContext(Dispatchers.IO) {
+    override suspend fun findGroundingDataFromServer(caseIds: List<Long>): GroundingData = withContext(Dispatchers.IO) {
         if (caseIds.isEmpty()) {
-            return@withContext ""
+            return@withContext GroundingData.EMPTY
         }
         prepare()
 
@@ -128,22 +140,24 @@ class LegalSearchRepository(
             throw e
         } catch (e: Exception) {
             report(NETWORK_TAG, " ❌ 서버 연결 실패, 판례 없이 진행합니다: ${e.message}")
-            return@withContext ""
+            return@withContext GroundingData.EMPTY
         }
         if (!response.isSuccessful) {
             report(NETWORK_TAG, " ❌ 서버 에러 응답 (코드 ${response.code()}), 판례 없이 진행합니다.")
-            return@withContext ""
+            return@withContext GroundingData.EMPTY
         }
 
         val body = response.body().orEmpty()
         val trueCasesById = body.filter { it.id in targetIds }.associateBy { it.id }
         report(NETWORK_TAG, " 서버 응답 ${body.size}개 수신 -> 진짜 ${trueCasesById.size}개 사용, 가짜 ${body.size - trueCasesById.size}개 폐기 완료")
 
-        val groundingData = caseIds
-            .mapNotNull { trueCasesById[it] }
-            .joinToString(separator = "\n\n") { it.toGroundingText() }
+        val orderedCases = caseIds.mapNotNull { trueCasesById[it] }
+        val groundingData = GroundingData(
+            precedents = orderedCases.joinToString(separator = "\n\n") { it.toGroundingText() },
+            precedentReferences = orderedCases.map { it.toPrecedentReference() },
+        )
 
-        if (groundingData.isNotEmpty()) {
+        if (groundingData.precedents.isNotEmpty()) {
             searchResultCache.putGroundingData(caseIds, groundingData)
         }
         groundingData
@@ -171,6 +185,14 @@ class LegalSearchRepository(
         }
         return header + "\n" + content.orEmpty()
     }
+
+    private fun LawCaseResponse.toPrecedentReference(): PrecedentReference =
+        PrecedentReference(
+            id = id,
+            caseName = caseName?.trim()?.takeIf(String::isNotEmpty),
+            caseNumber = caseNum?.trim()?.takeIf(String::isNotEmpty),
+            courtName = courtName?.trim()?.takeIf(String::isNotEmpty),
+        )
 
     private fun report(tag: String, message: String) {
         Log.d(tag, message)

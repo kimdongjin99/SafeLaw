@@ -1,7 +1,10 @@
 package com.safelaw.data.db
 
+import com.safelaw.domain.GroundingData
+import com.safelaw.domain.LegalSearchHit
+
 /**
- * 최근 질문들의 검색 결과(판례 ID)와 서버에서 받은 판례 원문을 기억합니다.
+ * 최근 질문들의 검색 결과(판례 ID와 HNSW 거리)와 서버에서 받은 판례 원문을 기억합니다.
  * 새 질문이 이전 질문과 자카드 유사도 기준 이상으로 비슷하면 이전 결과를 재사용합니다.
  */
 class SearchResultCache(
@@ -12,19 +15,19 @@ class SearchResultCache(
     data class SimilarQuestionHit(
         val cachedQuestion: String,
         val similarity: Double,
-        val caseIds: List<Long>,
+        val searchHits: List<LegalSearchHit>,
     )
 
     private class CachedSearch(
         val bigrams: Set<String>,
-        val caseIds: List<Long>,
+        val searchHits: List<LegalSearchHit>,
     )
 
     // 질문 → 검색 결과(판례 ID)
     private val searchCache = lruMap<String, CachedSearch>()
 
-    // 판례 ID 목록 → 서버에서 받은 판례 원문
-    private val groundingCache = lruMap<List<Long>, String>()
+    // 판례 ID 목록 → 서버에서 받은 판례 원문과 메타데이터
+    private val groundingCache = lruMap<List<Long>, GroundingData>()
 
     /** 캐시된 질문 중 가장 비슷한 질문을 찾고, 기준 이상이면 그 검색 결과를 반환합니다. */
     @Synchronized
@@ -43,19 +46,19 @@ class SearchResultCache(
 
         // 최근에 쓴 항목으로 순서 갱신
         searchCache[cachedQuestion]
-        return SimilarQuestionHit(cachedQuestion, similarity, cached.caseIds)
+        return SimilarQuestionHit(cachedQuestion, similarity, cached.searchHits)
     }
 
     @Synchronized
-    fun putSearchResult(question: String, caseIds: List<Long>) {
-        searchCache[question] = CachedSearch(toBigrams(question), caseIds)
+    fun putSearchResult(question: String, searchHits: List<LegalSearchHit>) {
+        searchCache[question] = CachedSearch(toBigrams(question), searchHits)
     }
 
     @Synchronized
-    fun findGroundingData(caseIds: List<Long>): String? = groundingCache[caseIds]
+    fun findGroundingData(caseIds: List<Long>): GroundingData? = groundingCache[caseIds]
 
     @Synchronized
-    fun putGroundingData(caseIds: List<Long>, groundingData: String) {
+    fun putGroundingData(caseIds: List<Long>, groundingData: GroundingData) {
         groundingCache[caseIds] = groundingData
     }
 
