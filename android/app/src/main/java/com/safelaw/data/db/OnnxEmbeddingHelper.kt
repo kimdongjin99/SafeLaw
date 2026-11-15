@@ -4,6 +4,8 @@ import android.content.Context
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import java.io.File
+import java.io.IOException
 import java.nio.LongBuffer
 import kotlin.math.sqrt
 
@@ -19,8 +21,9 @@ class OnnxEmbeddingHelper(context: Context) {
     private val tokenizer: BertWordPieceTokenizer
 
     init {
-        val modelBytes = context.assets.open(MODEL_FILE_NAME).use { it.readBytes() }
-        session = env.createSession(modelBytes)
+        // 117MB 모델을 바이트 배열로 읽으면 Java 힙(약 192MB)이 모자라 OOM으로 죽습니다.
+        // 앱 내부 저장소에 파일로 한 번 복사해 두고 경로로 열면 ONNX Runtime이 네이티브 메모리에 올립니다.
+        session = env.createSession(modelFile(context).absolutePath)
 
         tokenizer = context.assets.open(VOCAB_FILE_NAME).bufferedReader().useLines { lines ->
             BertWordPieceTokenizer.fromVocabLines(lines)
@@ -55,6 +58,23 @@ class OnnxEmbeddingHelper(context: Context) {
 
     fun close() {
         session.close()
+    }
+
+    // 에셋 모델과 크기가 같은 복사본이 있으면 재사용하고, 없거나 다르면(모델 교체 등) 다시 복사합니다.
+    private fun modelFile(context: Context): File {
+        val target = File(context.noBackupFilesDir, MODEL_FILE_NAME)
+        val assetSize = context.assets.openFd(MODEL_FILE_NAME).use { it.length }
+        if (target.length() == assetSize) return target
+
+        val temp = File(target.parentFile, "$MODEL_FILE_NAME.tmp")
+        context.assets.open(MODEL_FILE_NAME).use { input ->
+            temp.outputStream().use { output -> input.copyTo(output) }
+        }
+        if (!temp.renameTo(target)) {
+            temp.delete()
+            throw IOException("ONNX 모델 복사 실패: ${target.absolutePath}")
+        }
+        return target
     }
 
     companion object {

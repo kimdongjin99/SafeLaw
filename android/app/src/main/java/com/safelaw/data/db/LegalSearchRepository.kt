@@ -6,6 +6,7 @@ import com.safelaw.data.db.data.LawCase
 import com.safelaw.data.db.data.LawCase_
 import com.safelaw.data.db.data.MyObjectBox
 import com.safelaw.data.db.network.LawCaseRequest
+import com.safelaw.data.db.network.LawCaseResponse
 import com.safelaw.data.db.network.RetrofitClient
 import com.safelaw.data.db.network.SafeLawApiService
 import com.safelaw.domain.DbRepository
@@ -140,7 +141,7 @@ class LegalSearchRepository(
 
         val groundingData = caseIds
             .mapNotNull { trueCasesById[it] }
-            .joinToString(separator = "\n\n") { "[판례 ${it.id}] ${it.title}\n${it.content}" }
+            .joinToString(separator = "\n\n") { it.toGroundingText() }
 
         if (groundingData.isNotEmpty()) {
             searchResultCache.putGroundingData(caseIds, groundingData)
@@ -155,6 +156,20 @@ class LegalSearchRepository(
             .filter { it !in exclude }
             .shuffled()
             .take(DUMMY_COUNT)
+    }
+
+    // 예: [판례 87425] 컴퓨터등사용사기등 (2023고단390, 인천지방법원 부천지원)
+    // 사건 번호·법원은 있는 것만 붙이고, 둘 다 없으면 괄호를 생략합니다.
+    private fun LawCaseResponse.toGroundingText(): String {
+        val details = listOf(caseNum, courtName)
+            .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
+            .joinToString(", ")
+        val header = buildString {
+            append("[판례 ").append(id).append("] ")
+            append(caseName?.trim().orEmpty().ifEmpty { "사건명 없음" })
+            if (details.isNotEmpty()) append(" (").append(details).append(")")
+        }
+        return header + "\n" + content.orEmpty()
     }
 
     private fun report(tag: String, message: String) {
