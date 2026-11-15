@@ -10,6 +10,7 @@ class LawCase {
     @Id(assignable = true)
     var id: Long = 0
 
-    @HnswIndex(dimensions = 384)
+    // KR-SBERT 임베딩 차원. 모델을 바꾸면 LawCaseImporter.DATASET_VERSION도 올려야 DB가 새로 채워집니다.
+    @HnswIndex(dimensions = 768)
     var embedding: FloatArray? = null
 }

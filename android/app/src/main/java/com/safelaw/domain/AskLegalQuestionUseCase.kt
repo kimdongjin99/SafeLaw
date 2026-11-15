@@ -10,14 +10,14 @@ class AskLegalQuestionUseCase(
         onToken: (String) -> Unit = {},
     ): String {
         // DB에서 벡터 검색 후 서버에서 grounding 데이터 조회
-        //val searchResult = db.vectorSearch(question)
-        //val groundingData = db.findGroundingDataFromServer(searchResult)
+        val searchResult = db.vectorSearch(question)
+        val groundingData = db.findGroundingDataFromServer(searchResult)
 
 
         // 질문과 grounding 데이터를 기반으로 모델 추론
         return slm.generateAnswer(
             question = question,
-            groundingData = "",
+            groundingData = groundingData,
             onToken = onToken,
         )
     }

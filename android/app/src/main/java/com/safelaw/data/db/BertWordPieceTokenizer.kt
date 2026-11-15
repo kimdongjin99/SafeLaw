@@ -4,12 +4,17 @@ import java.text.Normalizer
 import java.util.Locale
 
 /**
- * all-MiniLM-L6-v2(BERT uncased)가 학습 때 쓴 것과 같은 방식으로 문장을 토큰 ID로 바꿉니다.
- * HuggingFace BertTokenizer 순서: 텍스트 정리 → 소문자 → 악센트 제거 → 문장부호 분리 → WordPiece
+ * HuggingFace BertTokenizer와 같은 방식으로 문장을 토큰 ID로 바꿉니다.
+ * 순서: 텍스트 정리 → (소문자 + 악센트 제거) → 문장부호 분리 → WordPiece
+ *
+ * KR-SBERT(snunlp/KR-SBERT-V40K-klueNLI-augSTS)는 do_lower_case=false라서
+ * 소문자·악센트 제거를 하지 않습니다. 한글 음절이 자모로 쪼개지지 않고 그대로 사전에서 찾아집니다.
  */
 class BertWordPieceTokenizer(
     private val vocab: Map<String, Int>,
     private val maxLength: Int = DEFAULT_MAX_LENGTH,
+    // uncased 모델(all-MiniLM 등)만 true. true면 한글이 자모로 분해됩니다.
+    private val lowerCase: Boolean = false,
 ) {
 
     class Encoding(
@@ -53,7 +58,10 @@ class BertWordPieceTokenizer(
 
         return cleaned.split(' ')
             .filter { it.isNotEmpty() }
-            .flatMap { splitOnPunctuation(stripAccents(it.lowercase(Locale.ROOT))) }
+            .flatMap { word ->
+                val normalized = if (lowerCase) stripAccents(word.lowercase(Locale.ROOT)) else word
+                splitOnPunctuation(normalized)
+            }
     }
 
     // NFD로 분해한 뒤 결합용 기호(악센트)를 제거합니다. 한글 음절은 자모로 분해됩니다.
@@ -153,18 +161,22 @@ class BertWordPieceTokenizer(
             cp in 0xF900..0xFAFF || cp in 0x2F800..0x2FA1F
 
     companion object {
-        // sentence-transformers의 all-MiniLM-L6-v2 기본 최대 길이
-        const val DEFAULT_MAX_LENGTH = 256
+        // KR-SBERT의 max_seq_length (sentence_bert_config.json)
+        const val DEFAULT_MAX_LENGTH = 128
         private const val MAX_CHARS_PER_WORD = 100
         private const val CLS_TOKEN = "[CLS]"
         private const val SEP_TOKEN = "[SEP]"
         private const val UNK_TOKEN = "[UNK]"
 
         /** vocab.txt 한 줄 = 토큰 하나, 줄 번호 = 토큰 ID */
-        fun fromVocabLines(lines: Sequence<String>, maxLength: Int = DEFAULT_MAX_LENGTH): BertWordPieceTokenizer {
+        fun fromVocabLines(
+            lines: Sequence<String>,
+            maxLength: Int = DEFAULT_MAX_LENGTH,
+            lowerCase: Boolean = false,
+        ): BertWordPieceTokenizer {
             val vocab = HashMap<String, Int>()
             lines.forEachIndexed { index, token -> vocab[token] = index }
-            return BertWordPieceTokenizer(vocab, maxLength)
+            return BertWordPieceTokenizer(vocab, maxLength, lowerCase)
         }
     }
 }
