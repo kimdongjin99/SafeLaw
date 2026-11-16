@@ -10,6 +10,7 @@ import com.safelaw.data.db.network.LawCaseResponse
 import com.safelaw.data.db.network.RetrofitClient
 import com.safelaw.data.db.network.SafeLawApiService
 import com.safelaw.domain.DbRepository
+import com.safelaw.domain.DemoQuestionScenario
 import com.safelaw.domain.GroundingData
 import com.safelaw.domain.LegalSearchHit
 import com.safelaw.domain.PrecedentReference
@@ -117,7 +118,17 @@ class LegalSearchRepository(
         if (caseIds.isEmpty()) {
             return@withContext GroundingData.EMPTY
         }
-        prepare()
+        val isDemoRequest = caseIds == DemoQuestionScenario.CASE_IDS
+        if (!isDemoRequest) {
+            prepare()
+        } else {
+            check(DemoQuestionEmbedding.values.size == LawCaseImporter.EMBEDDING_DIMENSION)
+            report(
+                NETWORK_TAG,
+                " [시연 모드] 하드코딩된 768차원 질문 벡터 사용, " +
+                    "로컬 DB·ONNX 검색 생략 -> 고정 판례 ID: $caseIds",
+            )
+        }
 
         searchResultCache.findGroundingData(caseIds)?.let { cached ->
             report(CACHE_TAG, " [캐시 O] 판례 원문 재사용, 서버 요청 생략 -> 판례 ID: $caseIds")
@@ -125,7 +136,11 @@ class LegalSearchRepository(
         }
 
         val targetIds = caseIds.toSet()
-        val dummyIds = pickDummyIds(exclude = targetIds)
+        val dummyIds = if (isDemoRequest) {
+            DemoQuestionScenario.DUMMY_CASE_IDS.filter { it !in targetIds }
+        } else {
+            pickDummyIds(exclude = targetIds)
+        }
         val mixedIds = (caseIds + dummyIds).shuffled()
         report(
             NETWORK_TAG,

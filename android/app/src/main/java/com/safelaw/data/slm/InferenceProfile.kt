@@ -28,10 +28,10 @@ internal data class InferenceProfile(
         )
 
         private val MEDIUM = InferenceProfile(
-            name = "medium-s10-s6-lite-2024",
+            name = "medium-s10-s6-lite-2024-demo-chunked",
             contextSize = 1536,
-            batchSize = 256,
-            microBatchSize = 128,
+            batchSize = 64,
+            microBatchSize = 32,
             generationThreads = 4,
             promptThreads = 4,
             maxTokens = 192,

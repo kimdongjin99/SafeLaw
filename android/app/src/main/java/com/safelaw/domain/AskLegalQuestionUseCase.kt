@@ -6,17 +6,20 @@ class AskLegalQuestionUseCase(
 ){
 
     suspend fun getGroundingData(question: String): String {
-        val searchHits = db.vectorSearch(question)
-        return db.findGroundingDataFromServer(searchHits.map { it.caseId }).precedents
+        // 시연용: 로컬 ONNX 임베딩 및 ObjectBox/HNSW 검색을 실행하지 않습니다.
+        // val searchHits = db.vectorSearch(question)
+        // val caseIds = searchHits.map { it.caseId }
+        return db.findGroundingDataFromServer(DemoQuestionScenario.CASE_IDS).precedents
     }
 
     suspend fun ask(
         question: String,
         onToken: (String) -> Unit = {},
     ): String {
-        // DB에서 벡터 검색 후 서버에서 grounding 데이터 조회
-        val searchHits = db.vectorSearch(question)
-        val groundingData = db.findGroundingDataFromServer(searchHits.map { it.caseId })
+        // 시연용: 로컬 DB 관련 구현은 메모리 사용을 피하기 위해 잠시 비활성화합니다.
+        // val searchHits = db.vectorSearch(question)
+        // val groundingData = db.findGroundingDataFromServer(searchHits.map { it.caseId })
+        val groundingData = db.findGroundingDataFromServer(DemoQuestionScenario.CASE_IDS)
 
 
         // 질문과 grounding 데이터를 기반으로 모델 추론

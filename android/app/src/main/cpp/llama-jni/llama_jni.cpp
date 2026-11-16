@@ -358,36 +358,53 @@ namespace {
         bool stopped_at_eog = false;
         bool conditional_extension_started = false;
         bool streaming_enabled = token_callback != nullptr && on_token_method != nullptr;
-        llama_batch batch =
-                llama_batch_get_one(
-                        tokens.data(),
-                        static_cast<int32_t>(tokens.size())
-                        );
+        // n_batch보다 긴 프롬프트를 한 번에 llama_decode()에 넘기면
+        // llama.cpp 내부 검증에서 SIGABRT가 발생할 수 있다. 프롬프트를
+        // 설정된 배치 크기로 나눠 KV cache에 순차적으로 적재한다.
+        __android_log_print(
+                ANDROID_LOG_INFO, LOG_TAG,
+                "PERF prompt decode start: tokens=%d, chunk_size=%d",
+                token_count, batch_size
+        );
+        const auto prompt_decode_started_at = std::chrono::steady_clock::now();
+        bool prompt_decode_failed = false;
+        for (int32_t offset = 0; offset < token_count; offset += batch_size) {
+            const int32_t chunk_size = std::min(
+                    static_cast<int32_t>(batch_size),
+                    static_cast<int32_t>(token_count - offset)
+            );
+            llama_batch prompt_batch = llama_batch_get_one(tokens.data() + offset, chunk_size);
+            const int decode_result = llama_decode(context, prompt_batch);
+            if (decode_result != 0) {
+                log_error("prompt llama_decode failed");
+                prompt_decode_failed = true;
+                break;
+            }
+        }
+        __android_log_print(
+                ANDROID_LOG_INFO, LOG_TAG,
+                "PERF prompt decode end: %.2f ms, result=%d",
+                elapsed_ms(prompt_decode_started_at), prompt_decode_failed ? -1 : 0
+        );
+
+        if (prompt_decode_failed) {
+            llama_sampler_free(sampler);
+            llama_free(context);
+            return "Failed to decode the prompt.";
+        }
+
+        llama_batch batch{};
 
         //답변 생성 부분, 시간을 기록하며 로그로 출력한다.
         for (int generated = 0; generated < hard_max_tokens; ++generated) {
-            const auto decode_started_at = std::chrono::steady_clock::now();
-            if (generated == 0) {
-                __android_log_print(
-                        ANDROID_LOG_INFO, LOG_TAG,
-                        "PERF prompt decode start: tokens=%d",
-                        token_count
-                );
-            }
-
-            //실제 추론 부분(llama_decode()), context에 결과 저장
-            const int decode_result = llama_decode(context, batch);
-            if (generated == 0) {
-                __android_log_print(
-                        ANDROID_LOG_INFO, LOG_TAG,
-                        "PERF prompt decode end: %.2f ms, result=%d",
-                        elapsed_ms(decode_started_at), decode_result
-                );
-            }
-
-            if (decode_result != 0) {
-                log_error("llama_decode failed");
-                break;
+            // 첫 토큰은 이미 적재한 프롬프트의 logits에서 샘플링한다.
+            // 이후에는 직전에 생성한 토큰을 먼저 context에 반영한다.
+            if (generated > 0) {
+                const int decode_result = llama_decode(context, batch);
+                if (decode_result != 0) {
+                    log_error("generation llama_decode failed");
+                    break;
+                }
             }
 
             //모델이 예측한 후보 중 다음 토큰 하나를 선택하고, 답변 종료 신호라면 생성 반복문을 끝낸다
