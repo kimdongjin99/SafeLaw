@@ -9,7 +9,7 @@ import com.safelaw.data.db.network.LawCaseRequest
 import com.safelaw.data.db.network.LawCaseResponse
 import com.safelaw.data.db.network.RetrofitClient
 import com.safelaw.data.db.network.SafeLawApiService
-import com.safelaw.domain.DbRepository
+import com.safelaw.domain.repository.DbRepository
 import com.safelaw.domain.GroundingData
 import com.safelaw.domain.LegalSearchHit
 import com.safelaw.domain.PrecedentReference

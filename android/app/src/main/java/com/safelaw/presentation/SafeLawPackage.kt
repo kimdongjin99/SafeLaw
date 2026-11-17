@@ -6,9 +6,11 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfo
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.safelaw.domain.AskLegalQuestionUseCase
+import com.safelaw.domain.state.GenerationStateManager
 
 class SafeLawPackage(
     private val askLegalQuestionUseCase: AskLegalQuestionUseCase,
+    private val generationStateManager: GenerationStateManager,
 ) : BaseReactPackage() {
 
     override fun getModule(
@@ -19,6 +21,7 @@ class SafeLawPackage(
             SafeLawModule(
                 reactContext,
                 askLegalQuestionUseCase,
+                generationStateManager,
         )
         else -> null
     }

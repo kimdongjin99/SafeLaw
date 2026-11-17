@@ -1,4 +1,7 @@
-package com.safelaw.domain
+package com.safelaw.domain.repository
+
+import com.safelaw.domain.GroundingData
+import com.safelaw.domain.LegalSearchHit
 
 interface DbRepository {
     suspend fun vectorSearch(

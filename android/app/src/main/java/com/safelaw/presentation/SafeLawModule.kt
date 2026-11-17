@@ -8,16 +8,20 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.module.annotations.ReactModule
 import com.safelaw.domain.AskLegalQuestionUseCase
+import com.safelaw.domain.state.GenerationStateManager
+import com.safelaw.domain.state.GenerationStage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 
 @ReactModule(name = SafeLawModule.NAME)
 class SafeLawModule (
     reactContext: ReactApplicationContext,
-    private val askLegalQuestionUseCase : AskLegalQuestionUseCase
+    private val askLegalQuestionUseCase : AskLegalQuestionUseCase,
+    private val generationStateManager: GenerationStateManager,
 ) : ReactContextBaseJavaModule(reactContext){
 
     private val askingJob = SupervisorJob()
@@ -25,6 +29,30 @@ class SafeLawModule (
     private val askingScope = CoroutineScope(
         askingJob + Dispatchers.Default,
     )
+
+    override fun initialize() {
+        super.initialize()
+        askingScope.launch {
+            generationStateManager.currentStage.collect { stage ->
+                if (stage != null) {
+                    emitGenerationStage(stage)
+                }
+            }
+        }
+    }
+
+    private fun emitGenerationStage(stage: GenerationStage) {
+        if (!reactApplicationContext.hasActiveReactInstance()) {
+            return
+        }
+
+        val payload = Arguments.createMap().apply {
+            putString("stage", stage.name)
+        }
+        reactApplicationContext
+            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit(GENERATION_STAGE_EVENT, payload)
+    }
 
     @ReactMethod
     fun ask(
@@ -104,5 +132,6 @@ class SafeLawModule (
     companion object {
         const val NAME = "SafeLawModule"
         const val TOKEN_EVENT = "SafeLawToken"
+        const val GENERATION_STAGE_EVENT = "SafeLawGenerationStage"
     }
 }

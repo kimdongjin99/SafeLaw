@@ -1,4 +1,6 @@
-package com.safelaw.domain
+package com.safelaw.domain.repository
+
+import com.safelaw.domain.GroundingData
 
 interface SlmRepository {
 

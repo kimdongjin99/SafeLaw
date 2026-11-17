@@ -1,5 +1,8 @@
 package com.safelaw.domain
 
+import com.safelaw.domain.repository.DbRepository
+import com.safelaw.domain.repository.SlmRepository
+
 class AskLegalQuestionUseCase(
     private val db: DbRepository,
     private val slm: SlmRepository,
