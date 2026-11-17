@@ -2,7 +2,7 @@ package com.safelaw.data.slm
 
 import android.content.Context
 import com.safelaw.domain.GroundingData
-import com.safelaw.domain.SlmRepository
+import com.safelaw.domain.repository.SlmRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

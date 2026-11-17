@@ -5,8 +5,6 @@ enum class GenerationStage(
 ) {
     EMBEDDING_QUESTION("질문을 분석하고 있습니다."),
     SEARCHING_PRECEDENTS("관련 판례를 검색하고 있습니다."),
-    FETCHING_PRECEDENTS("판례 원문을 불러오고 있습니다."),
-    LOADING_MODEL("답변 모델을 준비하고 있습니다."),
     GENERATING_ANSWER("답변을 생성하고 있습니다."),
     POST_PROCESSING("답변을 정리하고 있습니다."),
     COMPLETED("답변 생성이 완료되었습니다."),

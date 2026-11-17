@@ -13,12 +13,15 @@ import com.facebook.soloader.SoLoader
 import com.safelaw.data.db.LegalSearchRepository
 import com.safelaw.data.slm.TextGenerationRepository
 import com.safelaw.domain.AskLegalQuestionUseCase
+import com.safelaw.domain.state.GenerationStateManager
 import com.safelaw.presentation.SafeLawPackage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class MainApplication : Application(), ReactApplication {
+
+  val generationStateManager = GenerationStateManager()
 
   // 온디바이스 법률 AI 관련 의존성 주입
   private val dbRepository by lazy {
@@ -44,6 +47,7 @@ class MainApplication : Application(), ReactApplication {
               add(
                 SafeLawPackage(
                   askLegalQuestionUseCase = askLegalQuestionUseCase,
+                  generationStateManager = generationStateManager,
                 )
               )
             }
