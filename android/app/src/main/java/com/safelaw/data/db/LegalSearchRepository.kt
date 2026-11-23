@@ -39,10 +39,13 @@ class LegalSearchRepository(
             .androidContext(appContext)
             .build()
     }
-    private val embeddingHelperLazy = lazy { embeddingHelper ?: OnnxEmbeddingHelper(appContext) }
+    // KR-SBERT 모델은 검색할 때만 열고 검색이 끝나면 바로 닫습니다.
+    // 검색 다음 단계인 EXAONE이 1.5GB 이상을 쓰므로, 같이 올라가 있으면 저사양 기기에서 메모리가 부족해집니다.
+    // 밖에서 넘겨받은 모델(테스트용)은 닫지 않고 계속 씁니다.
+    private val injectedEmbeddingHelper = embeddingHelper
+    private val embeddingMutex = Mutex()
 
     private val boxStore: BoxStore by storeLazy
-    private val embeddingHelper: OnnxEmbeddingHelper by embeddingHelperLazy
     private val lawCaseBox: Box<LawCase> by lazy { boxStore.boxFor(LawCase::class.java) }
     private val importer by lazy { LawCaseImporter(appContext, boxStore) }
 
@@ -84,7 +87,7 @@ class LegalSearchRepository(
         }
 
         report(CACHE_TAG, " [캐시 X] ONNX 모델로 새로 임베딩 계산 중 -> \"$question\"")
-        val queryEmbedding = embeddingHelper.embed(question)
+        val queryEmbedding = embedWithTemporaryModel(question)
 
         // HNSW는 근사 검색이라 5개만 찾으면 진짜 상위 판례를 놓칩니다.
         // 후보를 넉넉히 찾은 뒤 가까운 순으로 SEARCH_LIMIT개만 씁니다. (결과는 거리 오름차순)
@@ -106,6 +109,18 @@ class LegalSearchRepository(
             searchResultCache.putSearchResult(question, searchHits)
         }
         searchHits
+    }
+
+    // 모델을 열어 임베딩하고 바로 닫습니다. 동시에 두 질문이 와도 한 번에 하나만 열리도록 잠급니다.
+    private suspend fun embedWithTemporaryModel(question: String): FloatArray = embeddingMutex.withLock {
+        injectedEmbeddingHelper?.let { return@withLock it.embed(question) }
+
+        val helper = OnnxEmbeddingHelper(appContext)
+        try {
+            helper.embed(question)
+        } finally {
+            helper.close()
+        }
     }
 
     /**
@@ -200,10 +215,9 @@ class LegalSearchRepository(
     }
 
     fun close() {
+        // KR-SBERT 모델은 검색마다 열고 닫으므로 여기서는 넘겨받은 것만 닫습니다.
+        injectedEmbeddingHelper?.close()
         // 한 번도 검색하지 않았다면 열린 적이 없으니 닫을 것도 없습니다.
-        if (embeddingHelperLazy.isInitialized()) {
-            embeddingHelper.close()
-        }
         if (storeLazy.isInitialized() && !boxStore.isClosed) {
             boxStore.close()
         }
