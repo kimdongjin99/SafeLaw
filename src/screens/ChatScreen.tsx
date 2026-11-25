@@ -22,8 +22,36 @@ import {
   saveChatMessage,
 } from '../services/chatStorage';
 
+interface ChatTurnPayload {
+  question: string;
+  answer: string;
+}
+
 interface SafeLawNativeModule extends NativeModule {
   ask(question: string): Promise<string>;
+  askWithHistory?(question: string, history: ChatTurnPayload[]): Promise<string>;
+}
+
+// 이어지는 질문의 맥락용으로 AI에 함께 넘길 최근 대화 수와 길이
+const MAX_HISTORY_TURNS = 3;
+const MAX_HISTORY_ANSWER_CHARS = 200;
+
+// 화면의 메시지 목록에서 (질문, 답변) 쌍을 만들어 최근 대화만 남긴다. 오류 메시지는 뺀다.
+function buildRecentTurns(messages: Message[]): ChatTurnPayload[] {
+  const turns: ChatTurnPayload[] = [];
+  let pendingQuestion: string | null = null;
+  for (const m of messages) {
+    if (m.sender === 'user') {
+      pendingQuestion = m.text;
+    } else if (pendingQuestion) {
+      const isError = m.text.startsWith('오류가 발생') || m.text.startsWith('모델 실행 오류');
+      if (!isError) {
+        turns.push({ question: pendingQuestion, answer: m.text.slice(0, MAX_HISTORY_ANSWER_CHARS) });
+      }
+      pendingQuestion = null;
+    }
+  }
+  return turns.slice(-MAX_HISTORY_TURNS);
 }
 
 const safeLawModule = NativeModules.SafeLawModule as
@@ -210,7 +238,12 @@ export function ChatScreen({ navigation, route }: Props) {
       }
       */
 
-      const answer = await safeLawModule.ask(userText);
+      // 같은 대화방의 최근 대화를 함께 넘겨 이어지는 질문을 이해하게 한다
+      const recentTurns = buildRecentTurns(messages);
+      const answer =
+        safeLawModule.askWithHistory && recentTurns.length > 0
+          ? await safeLawModule.askWithHistory(userText, recentTurns)
+          : await safeLawModule.ask(userText);
       const finalText =
         answer?.trim() ||
         streamingTextRef.current.trim() ||

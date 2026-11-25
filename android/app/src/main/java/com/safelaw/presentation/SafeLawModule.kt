@@ -5,6 +5,8 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.ReadableArray
+import com.safelaw.domain.ChatTurn
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.module.annotations.ReactModule
 import com.safelaw.domain.AskLegalQuestionUseCase
@@ -62,6 +64,32 @@ class SafeLawModule (
         askingScope.launch {
             try {
                 val answer = askLegalQuestionUseCase.ask(question)
+                promise.resolve(answer)
+            } catch (error: Throwable) {
+                promise.reject("E_INFERENCE", error.message, error)
+            }
+        }
+    }
+
+    /**
+     * 같은 대화방의 최근 대화와 함께 묻는다.
+     * history: [{ question: string, answer: string }, ...] (오래된 것 -> 최근 순)
+     */
+    @ReactMethod
+    fun askWithHistory(
+        question: String,
+        history: ReadableArray,
+        promise: Promise,
+    ) {
+        val turns = (0 until history.size()).mapNotNull { index ->
+            val item = history.getMap(index) ?: return@mapNotNull null
+            val q = item.getString("question").orEmpty().trim()
+            val a = item.getString("answer").orEmpty().trim()
+            if (q.isEmpty() || a.isEmpty()) null else ChatTurn(q, a)
+        }
+        askingScope.launch {
+            try {
+                val answer = askLegalQuestionUseCase.ask(question, history = turns)
                 promise.resolve(answer)
             } catch (error: Throwable) {
                 promise.reject("E_INFERENCE", error.message, error)
