@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,9 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  NativeModules,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   User, Bell, Shield, HelpCircle,
@@ -17,6 +19,11 @@ import EncryptedStorage from 'react-native-encrypted-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { colors } from '../theme/colors';
 import apiClient from '../api/client';
+import { clearAllChatSessions, getChatSessions } from '../services/chatStorage';
+
+const safeLawModule = NativeModules.SafeLawModule as
+  | { clearSearchCache?: () => Promise<boolean> }
+  | undefined;
 
 interface Props {
   navigation: any;
@@ -31,7 +38,8 @@ export function SettingsScreen({ navigation }: Props) {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  // 프로필 수정 후 돌아왔을 때도 새 이름이 보이도록, 화면에 들어올 때마다 불러온다
+  useFocusEffect(useCallback(() => {
     const fetchUserInfo = async () => {
       try {
         const response = await apiClient.get('/api/v1/users/me');
@@ -57,7 +65,7 @@ export function SettingsScreen({ navigation }: Props) {
     };
 
     fetchUserInfo();
-  }, [navigation]);
+  }, [navigation]));
 
   const handleLogout = () => {
     Alert.alert('로그아웃', '정말 로그아웃 하시겠습니까?', [
@@ -91,18 +99,37 @@ export function SettingsScreen({ navigation }: Props) {
     ]);
   };
 
-  const handleClearLocalData = () => {
+  // 로컬 데이터 관리: 기기에 저장된 상담 내역과 검색 캐시를 지운다 (판례 DB와 AI 모델은 유지)
+  const handleClearLocalData = async () => {
+    const sessions = await getChatSessions();
+    const messageCount = sessions.reduce((sum, s) => sum + s.messages.length, 0);
     Alert.alert(
       '로컬 데이터 삭제',
-      '기기에 저장된 모든 상담 내역이 영구적으로 삭제됩니다. 계속하시겠습니까?',
+      `기기에 저장된 상담 ${sessions.length}건(메시지 ${messageCount}개)과 검색 캐시가 영구적으로 삭제됩니다. 계속하시겠습니까?\n\n판례 데이터와 AI 모델은 삭제되지 않습니다.`,
       [
         { text: '취소', style: 'cancel' },
-        { 
-          text: '삭제', 
-          style: 'destructive', 
-          onPress: () => console.log('로컬 DB 삭제 수행') 
-        }
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearAllChatSessions();
+              await safeLawModule?.clearSearchCache?.();
+              Alert.alert('완료', '저장된 상담 내역과 검색 캐시를 삭제했습니다.');
+            } catch (error) {
+              console.error('로컬 데이터 삭제 실패:', error);
+              Alert.alert('오류', '삭제 중 문제가 발생했습니다. 다시 시도해주세요.');
+            }
+          },
+        },
       ]
+    );
+  };
+
+  const handleAppInfo = () => {
+    Alert.alert(
+      'SafeLaw',
+      '버전 1.0.0\n온디바이스 AI 기반 개인정보 보호형 법률 상담 앱\n\n임베딩: KR-SBERT · 검색: ObjectBox HNSW\n답변 생성: EXAONE (온디바이스)\n\n2026 졸업프로젝트 SafeLaw 팀'
     );
   };
 
@@ -137,6 +164,7 @@ export function SettingsScreen({ navigation }: Props) {
             icon={<User color={colors.foreground} size={20} />}
             label="프로필 관리"
             description="이름 등 정보 수정"
+            onPress={() => navigation.navigate('Profile')}
           />
           {/* EMAIL 가입자인 경우에만 비밀번호 변경 메뉴 노출[cite: 17] */}
           {userData.provider === 'EMAIL' && (
@@ -144,12 +172,14 @@ export function SettingsScreen({ navigation }: Props) {
               icon={<Lock color={colors.foreground} size={20} />}
               label="비밀번호 변경"
               description="계정 비밀번호 수정"
+              onPress={() => navigation.navigate('ChangePassword')}
             />
           )}
           <SettingItem
             icon={<Bell color={colors.foreground} size={20} />}
             label="알림 설정"
-            description="푸시 알림 및 이메일 알림"
+            description="앱 알림 및 이메일 알림"
+            onPress={() => navigation.navigate('NotificationSettings')}
           />
         </SettingsSection>
 
@@ -157,7 +187,8 @@ export function SettingsScreen({ navigation }: Props) {
           <SettingItem
             icon={<Shield color={colors.foreground} size={20} />}
             label="데이터 보안"
-            description="온디바이스 AI 처리 설정"
+            description="온디바이스 AI 처리 방식"
+            onPress={() => navigation.navigate('DataSecurity')}
           />
           <SettingItem
             icon={<Database color={colors.foreground} size={20} />}
@@ -172,11 +203,13 @@ export function SettingsScreen({ navigation }: Props) {
             icon={<HelpCircle color={colors.foreground} size={20} />}
             label="도움말"
             description="자주 묻는 질문"
+            onPress={() => navigation.navigate('Help')}
           />
           <SettingItem
             icon={<Info color={colors.foreground} size={20} />}
             label="앱 정보"
             description="버전 1.0.0"
+            onPress={handleAppInfo}
           />
           <SettingItem
             icon={<LogOut color={colors.destructive || '#FF3B30'} size={20} />}

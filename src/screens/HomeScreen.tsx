@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Shield, Lock, Zap, MessageSquare, Download, Settings } from 'lucide-react-native';
+import { Shield, Lock, Zap, MessageSquare, Download, Settings, History } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import apiClient from '../api/client';
 import EncryptedStorage from 'react-native-encrypted-storage';
@@ -113,6 +113,14 @@ export function HomeScreen({ navigation }: Props) {
         >
           <Text style={styles.ctaBtnText}>상담 시작하기</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.historyBtn}
+          onPress={() => navigation.navigate('History')}
+        >
+          <History color={colors.primary} size={18} />
+          <Text style={styles.historyBtnText}>상담 내역 보기</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -182,4 +190,10 @@ const styles = StyleSheet.create({
     borderRadius: 12, alignItems: 'center',
   },
   ctaBtnText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  historyBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginTop: 12, paddingVertical: 14, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.white,
+  },
+  historyBtnText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
 });

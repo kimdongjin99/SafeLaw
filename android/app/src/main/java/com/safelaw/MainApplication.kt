@@ -32,6 +32,11 @@ class MainApplication : Application(), ReactApplication {
     TextGenerationRepository(applicationContext)
   }
 
+  /** 설정 > 로컬 데이터 관리에서 부르는 검색 캐시 삭제 */
+  fun clearSearchCache() {
+    dbRepository.clearSearchCache()
+  }
+
   private val askLegalQuestionUseCase by lazy {
     AskLegalQuestionUseCase(
       db = dbRepository,

@@ -116,6 +116,17 @@ class SafeLawModule (
             .emit(TOKEN_EVENT, payload)
     }
 
+    /** 설정 > 로컬 데이터 관리: 기기에 기억해 둔 검색 결과 캐시를 지웁니다. */
+    @ReactMethod
+    fun clearSearchCache(promise: Promise) {
+        try {
+            (reactApplicationContext.applicationContext as com.safelaw.MainApplication).clearSearchCache()
+            promise.resolve(true)
+        } catch (error: Throwable) {
+            promise.reject("E_CLEAR_CACHE", error.message, error)
+        }
+    }
+
     @ReactMethod
     fun addListener(eventName: String) = Unit
 

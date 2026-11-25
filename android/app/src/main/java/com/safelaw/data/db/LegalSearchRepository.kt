@@ -282,6 +282,12 @@ class LegalSearchRepository(
         onEvent(message)
     }
 
+    /** 최근 질문의 검색 결과·판례 원문 캐시를 지웁니다. 판례 DB와 모델은 그대로 둡니다. */
+    fun clearSearchCache() {
+        searchResultCache.clear()
+        Log.d(CACHE_TAG, " 검색 캐시 삭제 (로컬 데이터 관리)")
+    }
+
     fun close() {
         // KR-SBERT 모델은 검색마다 열고 닫으므로 여기서는 넘겨받은 것만 닫습니다.
         injectedEmbeddingHelper?.close()

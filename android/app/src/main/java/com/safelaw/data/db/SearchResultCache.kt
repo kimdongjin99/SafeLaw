@@ -62,6 +62,13 @@ class SearchResultCache(
         groundingCache[caseIds] = groundingData
     }
 
+    /** 기억해 둔 검색 결과와 판례 원문을 모두 지웁니다. (설정 > 로컬 데이터 관리) */
+    @Synchronized
+    fun clear() {
+        searchCache.clear()
+        groundingCache.clear()
+    }
+
     private fun <K, V> lruMap(): LinkedHashMap<K, V> =
         object : LinkedHashMap<K, V>(maxSize, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>?): Boolean {

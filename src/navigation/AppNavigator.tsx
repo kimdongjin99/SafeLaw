@@ -15,6 +15,11 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { ProfileScreen } from '../screens/settings/ProfileScreen';
+import { ChangePasswordScreen } from '../screens/settings/ChangePasswordScreen';
+import { NotificationSettingsScreen } from '../screens/settings/NotificationSettingsScreen';
+import { DataSecurityScreen } from '../screens/settings/DataSecurityScreen';
+import { HelpScreen } from '../screens/settings/HelpScreen';
 
 const Stack = createStackNavigator();
 
@@ -62,6 +67,11 @@ export function AppNavigator() {
         <Stack.Screen name="Chat" component={ChatScreen as any} />
         <Stack.Screen name="History" component={HistoryScreen as any} />
         <Stack.Screen name="Settings" component={SettingsScreen as any} />
+        <Stack.Screen name="Profile" component={ProfileScreen as any} />
+        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen as any} />
+        <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen as any} />
+        <Stack.Screen name="DataSecurity" component={DataSecurityScreen as any} />
+        <Stack.Screen name="Help" component={HelpScreen as any} />
       </Stack.Navigator>
     </NavigationContainer>
   );
