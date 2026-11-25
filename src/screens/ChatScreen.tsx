@@ -14,7 +14,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, Bot, User } from 'lucide-react-native';
+import { ArrowLeft, Send, Bot, User, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import {
   Message,
@@ -379,9 +379,11 @@ export function ChatScreen({ navigation, route }: Props) {
                     isUser ? styles.userBubble : styles.aiBubble,
                   ]}
                 >
-                  <Text style={isUser ? styles.userText : styles.aiText}>
-                    {item.text}
-                  </Text>
+                  {isUser ? (
+                    <Text style={styles.userText}>{item.text}</Text>
+                  ) : (
+                    <AiAnswerText text={item.text} />
+                  )}
                 </View>
                 {isUser && (
                   <View style={styles.userAvatar}>
@@ -434,7 +436,80 @@ export function ChatScreen({ navigation, route }: Props) {
   );
 }
 
+// AI 답변에서 "2. 근거 조항"부터는 접어 두고, 버튼을 누르면 펼쳐 보여준다.
+// 저장된 답변 글은 그대로 두고 화면에 보여줄 때만 나눈다.
+const EVIDENCE_HEADING = /\n\s*2\. 근거 조항/;
+
+function splitAnswer(text: string): { body: string; evidence: string | null } {
+  const match = EVIDENCE_HEADING.exec(text);
+  if (!match) {
+    return { body: text, evidence: null };
+  }
+  return {
+    body: text.slice(0, match.index).trimEnd(),
+    evidence: text.slice(match.index).trim(),
+  };
+}
+
+function countEvidence(evidence: string): { articles: number; precedents: number } {
+  const [articlePart, precedentPart = ''] = evidence.split(/3\. 근거 출처/);
+  const articles = (articlePart.match(/^- (?!답변에서 확인된 관련 조항이 없습니다)/gm) || []).length;
+  const precedents = (precedentPart.match(/^\d+\) /gm) || []).length;
+  return { articles, precedents };
+}
+
+function AiAnswerText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const { body, evidence } = splitAnswer(text);
+
+  if (!evidence) {
+    return <Text style={styles.aiText}>{text}</Text>;
+  }
+
+  const { articles, precedents } = countEvidence(evidence);
+  const summary = [
+    articles > 0 ? `조항 ${articles}개` : null,
+    precedents > 0 ? `판례 ${precedents}건` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <View>
+      <Text style={styles.aiText}>{body}</Text>
+      <TouchableOpacity
+        style={styles.evidenceToggle}
+        onPress={() => setOpen((v) => !v)}
+        activeOpacity={0.7}
+      >
+        {open ? (
+          <ChevronUp color={colors.primary} size={16} />
+        ) : (
+          <ChevronDown color={colors.primary} size={16} />
+        )}
+        <Text style={styles.evidenceToggleText}>
+          {open ? '근거 접기' : `근거 보기${summary ? ` (${summary})` : ''}`}
+        </Text>
+      </TouchableOpacity>
+      {open ? <Text style={[styles.aiText, styles.evidenceText]}>{evidence}</Text> : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  evidenceToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: colors.primaryLight,
+    alignSelf: 'flex-start',
+  },
+  evidenceToggleText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
+  evidenceText: { marginTop: 10 },
   container: { flex: 1, backgroundColor: colors.white },
   header: {
     flexDirection: 'row',
