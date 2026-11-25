@@ -376,7 +376,24 @@ namespace {
             }
 
             //실제 추론 부분(llama_decode()), context에 결과 저장
-            const int decode_result = llama_decode(context, batch);
+            // 프롬프트(질문+판례)는 n_batch보다 길 수 있다. llama_decode에 n_batch보다 많은 토큰을
+            // 한 번에 넣으면 llama.cpp가 GGML_ASSERT(n_tokens_all <= n_batch)로 앱을 강제 종료하므로,
+            // 첫 단계에서는 n_batch 단위로 나눠 넣는다. 마지막 조각의 마지막 토큰 결과로 다음 토큰을 고른다.
+            int decode_result = 0;
+            if (generated == 0) {
+                for (int start = 0; start < token_count; start += batch_size) {
+                    const int chunk = std::min(batch_size, token_count - start);
+                    decode_result = llama_decode(
+                            context,
+                            llama_batch_get_one(tokens.data() + start, chunk)
+                    );
+                    if (decode_result != 0) {
+                        break;
+                    }
+                }
+            } else {
+                decode_result = llama_decode(context, batch);
+            }
             if (generated == 0) {
                 __android_log_print(
                         ANDROID_LOG_INFO, LOG_TAG,
