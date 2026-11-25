@@ -9,6 +9,7 @@ import java.io.DataInputStream
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -24,6 +25,8 @@ import kotlinx.coroutines.withContext
 class LawCaseImporter(
     context: Context,
     private val store: BoxStore,
+    // ObjectBox는 DB를 읽은 스레드마다 읽기 정보를 남깁니다. 저장소가 DB 전용 스레드를 넘기면 그 스레드에서만 DB를 씁니다.
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
     private val appContext = context.applicationContext
@@ -35,7 +38,7 @@ class LawCaseImporter(
      * 중간에 앱이 꺼진 경우, 예전 모델(384차원) 데이터가 남아 있는 경우 모두 여기서 새로 채워집니다.
      * @return 주입 후 DB에 저장된 판례 개수
      */
-    suspend fun importIfEmpty(onProgress: (String) -> Unit = {}): Long = withContext(Dispatchers.IO) {
+    suspend fun importIfEmpty(onProgress: (String) -> Unit = {}): Long = withContext(dispatcher) {
         val currentCount = lawCaseBox.count()
         Log.d(TAG, " 디비 로드 완료! 현재 보관 중인 판례 개수: $currentCount 개")
 

@@ -16,10 +16,15 @@ import com.safelaw.domain.PrecedentReference
 import io.objectbox.Box
 import io.objectbox.BoxStore
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.security.SecureRandom
+import java.util.concurrent.Executors
+import kotlin.random.asKotlinRandom
 
 class LegalSearchRepository(
     context: Context,
@@ -33,21 +38,56 @@ class LegalSearchRepository(
 
     private val appContext = context.applicationContext
 
-    // DB와 ONNX 모델은 무거워서 앱 시작 때가 아니라 처음 검색할 때 엽니다.
-    private val storeLazy = lazy {
-        store ?: MyObjectBox.builder()
-            .androidContext(appContext)
-            .build()
-    }
+    // ObjectBox DB는 검색·더미 선택에 쓸 때만 열고, 서버에서 판례를 받은 뒤 닫습니다.
+    // 열려 있으면 HNSW 벡터 캐시 등으로 수백 MB를 쓰는데, 답변 생성(EXAONE) 중에는 DB가 필요 없기 때문입니다.
+    // 닫아도 판례 데이터는 DB 파일에 그대로 있어 다시 넣지 않습니다.
+    // 밖에서 넘겨받은 DB(테스트용)는 닫지 않고 계속 씁니다.
+    private val injectedStore = store
+    private var openedStore: BoxStore? = null
+    private val storeLock = Any()
+    private val dbMutex = Mutex()
+
+    // ObjectBox는 DB를 읽은 스레드마다 읽기 정보를 따로 들고 있어서, 다른 스레드에서 DB를 닫으면 멈출 수 있습니다.
+    // 그래서 DB를 열고, 읽고, 닫는 일은 전부 이 한 스레드에서만 합니다.
+    private val dbDispatcher = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "SafeLaw-DB")
+    }.asCoroutineDispatcher()
+
+    // 가짜 ID를 서버가 예측하지 못하도록 보안용 난수를 씁니다.
+    private val dummyRandom = SecureRandom().asKotlinRandom()
+
     // KR-SBERT 모델은 검색할 때만 열고 검색이 끝나면 바로 닫습니다.
     // 검색 다음 단계인 EXAONE이 1.5GB 이상을 쓰므로, 같이 올라가 있으면 저사양 기기에서 메모리가 부족해집니다.
     // 밖에서 넘겨받은 모델(테스트용)은 닫지 않고 계속 씁니다.
     private val injectedEmbeddingHelper = embeddingHelper
     private val embeddingMutex = Mutex()
 
-    private val boxStore: BoxStore by storeLazy
-    private val lawCaseBox: Box<LawCase> by lazy { boxStore.boxFor(LawCase::class.java) }
-    private val importer by lazy { LawCaseImporter(appContext, boxStore) }
+    private val boxStore: BoxStore
+        get() = synchronized(storeLock) {
+            injectedStore
+                ?: openedStore?.takeUnless { it.isClosed }
+                ?: MyObjectBox.builder()
+                    .androidContext(appContext)
+                    .build()
+                    .also {
+                        openedStore = it
+                        Log.d(DB_TAG, " DB 열기")
+                    }
+        }
+    private val lawCaseBox: Box<LawCase>
+        get() = boxStore.boxFor(LawCase::class.java)
+
+    private fun releaseStore() {
+        if (injectedStore != null) return
+        synchronized(storeLock) {
+            openedStore?.let {
+                it.closeThreadResources()
+                it.close()
+                Log.d(DB_TAG, " DB 닫기 (답변 생성 동안 메모리 확보)")
+            }
+            openedStore = null
+        }
+    }
 
     // 판례 주입이 끝났는지 기억해서, 두 번째 호출부터는 바로 넘어갑니다.
     private val prepareMutex = Mutex()
@@ -64,10 +104,12 @@ class LegalSearchRepository(
      * @return DB에 저장된 판례 개수
      */
     suspend fun prepare(onProgress: (String) -> Unit = {}): Long = prepareMutex.withLock {
-        if (isDataReady) {
-            return@withLock lawCaseBox.count()
+        withContext(dbDispatcher) {
+            if (isDataReady) {
+                return@withContext lawCaseBox.count()
+            }
+            LawCaseImporter(appContext, boxStore, dbDispatcher).importIfEmpty(onProgress).also { isDataReady = true }
         }
-        importer.importIfEmpty(onProgress).also { isDataReady = true }
     }
 
     /**
@@ -75,40 +117,45 @@ class LegalSearchRepository(
      * 이전 질문과 충분히 비슷하면 임베딩·검색 없이 이전 결과를 재사용합니다.
      */
     override suspend fun vectorSearch(question: String): List<LegalSearchHit> = withContext(Dispatchers.Default) {
-        prepare()
+        // 검색 도중 다른 질문의 판례 조회가 끝나 DB를 닫지 않도록 잠급니다.
+        dbMutex.withLock {
+            prepare()
 
-        searchResultCache.findSimilarQuestion(question)?.let { hit ->
-            report(
-                CACHE_TAG,
-                " [캐시 O] 비슷한 이전 질문 재사용 (자카드 ${"%.2f".format(hit.similarity)}) " +
-                    "\"$question\" ≈ \"${hit.cachedQuestion}\" -> 검색 결과: ${hit.searchHits}"
-            )
-            return@withContext hit.searchHits
-        }
+            searchResultCache.findSimilarQuestion(question)?.let { hit ->
+                report(
+                    CACHE_TAG,
+                    " [캐시 O] 비슷한 이전 질문 재사용 (자카드 ${"%.2f".format(hit.similarity)}) " +
+                        "\"$question\" ≈ \"${hit.cachedQuestion}\" -> 검색 결과: ${hit.searchHits}"
+                )
+                return@withContext hit.searchHits
+            }
 
-        report(CACHE_TAG, " [캐시 X] ONNX 모델로 새로 임베딩 계산 중 -> \"$question\"")
-        val queryEmbedding = embedWithTemporaryModel(question)
+            report(CACHE_TAG, " [캐시 X] ONNX 모델로 새로 임베딩 계산 중 -> \"$question\"")
+            val queryEmbedding = embedWithTemporaryModel(question)
 
-        // HNSW는 근사 검색이라 5개만 찾으면 진짜 상위 판례를 놓칩니다.
-        // 후보를 넉넉히 찾은 뒤 가까운 순으로 SEARCH_LIMIT개만 씁니다. (결과는 거리 오름차순)
-        val searchHits = lawCaseBox.query(LawCase_.embedding.nearestNeighbors(queryEmbedding, CANDIDATE_COUNT))
-            .build()
-            .use { query ->
-                query.findIdsWithScores()
-                    .take(SEARCH_LIMIT)
-                    .map { result ->
-                        LegalSearchHit(
-                            caseId = result.id,
-                            distance = result.score,
-                        )
+            // HNSW는 근사 검색이라 5개만 찾으면 진짜 상위 판례를 놓칩니다.
+            // 후보를 넉넉히 찾은 뒤 가까운 순으로 SEARCH_LIMIT개만 씁니다. (결과는 거리 오름차순)
+            val searchHits = withContext(dbDispatcher) {
+                lawCaseBox.query(LawCase_.embedding.nearestNeighbors(queryEmbedding, CANDIDATE_COUNT))
+                    .build()
+                    .use { query ->
+                        query.findIdsWithScores()
+                            .take(SEARCH_LIMIT)
+                            .map { result ->
+                                LegalSearchHit(
+                                    caseId = result.id,
+                                    distance = result.score,
+                                )
+                            }
                     }
             }
 
-        report(SEARCH_TAG, " [임베딩 검색 성공] 질문: \"$question\" -> 검색 결과: $searchHits")
-        if (searchHits.isNotEmpty()) {
-            searchResultCache.putSearchResult(question, searchHits)
+            report(SEARCH_TAG, " [임베딩 검색 성공] 질문: \"$question\" -> 검색 결과: $searchHits")
+            if (searchHits.isNotEmpty()) {
+                searchResultCache.putSearchResult(question, searchHits)
+            }
+            searchHits
         }
-        searchHits
     }
 
     // 모델을 열어 임베딩하고 바로 닫습니다. 동시에 두 질문이 와도 한 번에 하나만 열리도록 잠급니다.
@@ -129,6 +176,17 @@ class LegalSearchRepository(
      * 같은 판례 ID 목록으로 받아둔 원문이 캐시에 있으면 서버에 요청하지 않습니다.
      */
     override suspend fun findGroundingDataFromServer(caseIds: List<Long>): GroundingData = withContext(Dispatchers.IO) {
+        // 판례를 받고 나면 답변 생성 전까지 DB가 필요 없으므로, 어떻게 끝나든 DB를 닫습니다.
+        dbMutex.withLock {
+            try {
+                findGroundingData(caseIds)
+            } finally {
+                withContext(NonCancellable + dbDispatcher) { releaseStore() }
+            }
+        }
+    }
+
+    private suspend fun findGroundingData(caseIds: List<Long>): GroundingData = withContext(Dispatchers.IO) {
         if (caseIds.isEmpty()) {
             return@withContext GroundingData.EMPTY
         }
@@ -140,7 +198,7 @@ class LegalSearchRepository(
         }
 
         val targetIds = caseIds.toSet()
-        val dummyIds = pickDummyIds(exclude = targetIds)
+        val dummyIds = withContext(dbDispatcher) { pickDummyIds(exclude = targetIds) }
         val mixedIds = (caseIds + dummyIds).shuffled()
         report(
             NETWORK_TAG,
@@ -178,13 +236,23 @@ class LegalSearchRepository(
         groundingData
     }
 
-    // 임베딩까지 읽지 않도록 ID만 조회한 뒤 더미를 고릅니다.
+    // 가짜 ID는 판례 ID 범위(1 ~ 판례 수)에서 무작위로 뽑고, DB에 있는 번호인지 하나씩 확인합니다.
+    // 예전처럼 ID 12만 개를 전부 꺼내 섞으면 DB 파일 전체를 읽게 되어, 앱을 켜고 첫 질문 때 약 7초가 걸렸습니다.
     private fun pickDummyIds(exclude: Set<Long>): List<Long> {
-        val allIds = lawCaseBox.query().build().use { it.findIds() }
-        return allIds
-            .filter { it !in exclude }
-            .shuffled()
-            .take(DUMMY_COUNT)
+        val box = lawCaseBox
+        val maxId = box.count()
+        if (maxId <= 0L) return emptyList()
+
+        val picked = LinkedHashSet<Long>()
+        var attempts = 0
+        while (picked.size < DUMMY_COUNT && attempts < DUMMY_COUNT * MAX_ATTEMPTS_PER_DUMMY) {
+            attempts++
+            val id = dummyRandom.nextLong(1L, maxId + 1)
+            if (id !in exclude && box.contains(id)) {
+                picked += id
+            }
+        }
+        return picked.toList()
     }
 
     // 예: [판례 87425] 컴퓨터등사용사기등 (2023고단390, 인천지방법원 부천지원)
@@ -217,18 +285,19 @@ class LegalSearchRepository(
     fun close() {
         // KR-SBERT 모델은 검색마다 열고 닫으므로 여기서는 넘겨받은 것만 닫습니다.
         injectedEmbeddingHelper?.close()
-        // 한 번도 검색하지 않았다면 열린 적이 없으니 닫을 것도 없습니다.
-        if (storeLazy.isInitialized() && !boxStore.isClosed) {
-            boxStore.close()
-        }
+        injectedStore?.close()
+        releaseStore()
     }
 
     companion object {
         private const val SEARCH_TAG = "SafeLaw_Search"
+        private const val DB_TAG = "SafeLaw_DB"
         private const val NETWORK_TAG = "SafeLaw_Network"
         private const val CACHE_TAG = "SafeLaw_Cache"
         private const val SEARCH_LIMIT = 5
         private const val CANDIDATE_COUNT = 100
         private const val DUMMY_COUNT = 10
+        // 빈 번호가 많아도 무한히 돌지 않도록 가짜 ID 하나당 최대 시도 횟수
+        private const val MAX_ATTEMPTS_PER_DUMMY = 20
     }
 }
